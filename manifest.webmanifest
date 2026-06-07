@@ -1,0 +1,16 @@
+{
+  "name": "Neon Maze — finger-drawn maze runner",
+  "short_name": "Neon Maze",
+  "description": "Thread the glowing line to the exit without crossing it. Shake to mow grass or fire the ball.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070b11",
+  "theme_color": "#070b11",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

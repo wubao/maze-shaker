@@ -1,0 +1,3657 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>NEON MAZE — finger-drawn maze runner</title>
+<meta name="description" content="Finger-drawn neon maze runner. Thread the glowing line to the exit without crossing it.">
+<!-- PWA: installable on a phone home screen, offline-capable, launches fullscreen -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#070b11">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Neon Maze">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   NEON MAZE  —  mobile-first styles
+   Desktop differences are grouped in the @media block far below
+   and are also summarised in the chat message.
+   ============================================================ */
+:root{
+  --bg:        #070b11;
+  --cabinet:   #0c121d;
+  --panel:     #0e1622;
+  --line:      #18283c;
+  --floor:     #0a1019;
+  --wall:      #21344d;
+  --ink:       #d7ecf7;
+  --muted:     #6f8aa3;
+  --cyan:      #34e1ff;
+  --lime:      #b6ff3a;
+  --green:     #39ff9b;
+  --gold:      #ffcf3a;
+  --fire:      #ff5a1f;
+  --danger:    #ff4d6d;
+  --ui-font:   "Space Mono","SFMono-Regular",ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
+  --display:   "Press Start 2P","Space Mono",ui-monospace,monospace;
+}
+
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; margin:0; }
+body{
+  background:
+     radial-gradient(120% 80% at 50% -10%, #0f1a2a 0%, var(--bg) 60%) fixed,
+     var(--bg);
+  color:var(--ink);
+  font-family:var(--ui-font);
+  overflow:hidden;
+  user-select:none; -webkit-user-select:none;
+  /* faint scanline atmosphere */
+  background-image:
+     repeating-linear-gradient(0deg, rgba(255,255,255,.015) 0 1px, transparent 1px 3px),
+     radial-gradient(120% 80% at 50% -10%, #0f1a2a 0%, var(--bg) 60%);
+}
+
+/* ---------- shell / layout ---------- */
+.app{
+  height:100dvh;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:8px;
+  padding-top:max(8px, env(safe-area-inset-top));
+  padding-bottom:max(8px, env(safe-area-inset-bottom));
+}
+
+/* ---------- top HUD ---------- */
+.topbar{
+  display:flex; align-items:center; gap:10px;
+  background:linear-gradient(180deg, var(--panel), #0a121c);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:8px 10px;
+  box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 8px 24px rgba(0,0,0,.4);
+}
+.brand{ display:flex; flex-direction:column; gap:3px; min-width:0; }
+.brand .title{
+  font-family:var(--display);
+  font-size:12px; line-height:1; letter-spacing:.5px;
+  color:var(--cyan); text-shadow:0 0 10px rgba(52,225,255,.55);
+  white-space:nowrap;
+}
+.brand .sub{ font-size:9.5px; color:var(--muted); white-space:nowrap; }
+
+.timers{ display:flex; gap:5px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end; row-gap:5px; }
+.chip{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-width:42px; padding:4px 6px;
+  background:#0a131e; border:1px solid var(--line); border-radius:10px;
+  transition:opacity .25s ease, border-color .25s ease;
+}
+.chip b{ font-size:12px; line-height:1; }
+.chip span{ font-size:7.5px; color:var(--muted); margin-top:3px; letter-spacing:.5px; }
+.chip.lvl b{ color:var(--cyan); }
+.chip.stamp b{ color:var(--lime); }
+.chip.hog b{ color:#e2a978; }
+.chip.fire b{ color:var(--fire); }
+.chip.patch b{ color:#b07cff; }
+.chip.blob b{ color:#ffd23f; }
+/* dim hazard chips while the lights are out */
+.topbar.dark .chip.stamp,
+.topbar.dark .chip.hog,
+.topbar.dark .chip.fire,
+.topbar.dark .chip.patch{ opacity:.4; }
+
+.nextdir{
+  width:54px; height:54px; flex:0 0 auto;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:12px;
+  background:radial-gradient(circle at 50% 35%, #12243a, #0a131e);
+  border:1px solid var(--cyan);
+  box-shadow:0 0 14px rgba(52,225,255,.25) inset, 0 0 14px rgba(52,225,255,.18);
+}
+.nextdir .arrow{
+  font-size:26px; line-height:1; color:var(--cyan);
+  text-shadow:0 0 12px rgba(52,225,255,.8);
+  transition:transform .12s ease, color .12s ease;
+}
+.nextdir.idle{ border-color:var(--line); box-shadow:none; }
+.nextdir.idle .arrow{ color:var(--muted); text-shadow:none; opacity:.6; }
+
+/* ---------- board ---------- */
+.board-wrap{
+  position:relative; flex:1 1 auto; min-height:0;
+  display:flex; align-items:center; justify-content:center;
+}
+#game{
+  display:block;
+  border-radius:12px;
+  background:var(--floor);
+  border:1px solid var(--line);
+  box-shadow:0 0 0 1px rgba(0,0,0,.4), 0 18px 50px rgba(0,0,0,.55);
+  touch-action:none;
+}
+.statusline{
+  position:absolute; top:8px; left:50%; transform:translateX(-50%);
+  font-size:10px; color:var(--muted); pointer-events:none;
+  background:rgba(8,12,18,.55); padding:3px 8px; border-radius:999px;
+  border:1px solid var(--line); white-space:nowrap;
+}
+.statusline.warn{ color:var(--fire); border-color:rgba(255,90,31,.4); }
+
+/* ---------- controls (mobile bottom) ---------- */
+.controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.dpad{
+  --d:46px;
+  display:grid; gap:6px;
+  grid-template-columns:repeat(3,var(--d));
+  grid-template-rows:repeat(3,var(--d));
+}
+.dbtn{
+  appearance:none; border:1px solid var(--line); color:var(--ink);
+  background:linear-gradient(180deg, #12202f, #0a131e);
+  border-radius:12px; font-size:20px; line-height:1;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 2px 0 rgba(0,0,0,.5), 0 0 0 rgba(52,225,255,0);
+  transition:transform .06s ease, box-shadow .12s ease, border-color .12s ease, background .12s ease;
+  cursor:pointer; touch-action:none;
+}
+.dbtn:active{ transform:translateY(2px); box-shadow:0 0 0 rgba(0,0,0,.5); border-color:var(--cyan); }
+.dbtn.up{ grid-area:1/2; } .dbtn.left{ grid-area:2/1; }
+.dbtn.center{ grid-area:2/2; } .dbtn.right{ grid-area:2/3; }
+.dbtn.down{ grid-area:3/2; }
+.dbtn.center{
+  font-size:11px; letter-spacing:.5px;
+  background:linear-gradient(180deg,#16263a,#0c1623);
+  border-color:#2a4a6b; color:var(--cyan);
+}
+.dbtn.center.stopped{
+  color:var(--danger); border-color:var(--danger);
+  box-shadow:0 0 14px rgba(255,77,109,.35);
+}
+.dbtn.armed{ border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 12px rgba(52,225,255,.3); }
+
+.side{ display:flex; flex-direction:column; gap:8px; margin-left:auto; }
+.row{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.btn{
+  appearance:none; cursor:pointer;
+  font-family:var(--ui-font); font-size:11px; letter-spacing:.4px;
+  color:var(--ink); background:#0c1623; border:1px solid var(--line);
+  padding:8px 10px; border-radius:10px;
+  transition:border-color .12s ease, color .12s ease, background .12s ease;
+}
+.btn:active{ transform:translateY(1px); }
+.btn.primary{ color:#04121a; background:linear-gradient(180deg,var(--cyan),#1ab8da); border-color:transparent; font-weight:700; }
+.btn.toggle.on{ color:var(--lime); border-color:var(--lime); }
+/* keyboard focus — make the current button obvious for Tab / Enter / Space users */
+.btn:focus-visible, .closeX:focus-visible, .iconbtn:focus-visible, .dbtn:focus-visible,
+select.btn:focus-visible, .tab:focus-visible, input:focus-visible{
+  outline:none; border-color:var(--cyan);
+  box-shadow:0 0 0 2px rgba(52,225,255,.6), 0 0 14px rgba(52,225,255,.35);
+}
+/* little key-cap badge advertising a button's shortcut */
+.kc{
+  display:inline-block; min-width:14px; padding:1px 4px; margin-left:7px;
+  font-size:9px; line-height:1.45; text-align:center; vertical-align:middle;
+  border-radius:5px; border:1px solid rgba(255,255,255,.3);
+  background:rgba(0,0,0,.22); color:inherit; opacity:.82; font-weight:700;
+}
+.btn.primary .kc{ border-color:rgba(0,0,0,.4); background:rgba(0,0,0,.15); }
+select.btn, .field{ padding:7px 8px; }
+label.lab{ font-size:10px; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+input[type=range]{ width:120px; accent-color:var(--cyan); }
+.kbd{ display:none; } /* keyboard hints: desktop only */
+
+/* ---------- overlays ---------- */
+.overlay{
+  position:absolute; inset:0; display:none; z-index:20;
+  align-items:center; justify-content:center; padding:18px;
+  background:rgba(5,9,15,.78); backdrop-filter:blur(4px);
+}
+.overlay.show{ display:flex; }
+.card{
+  position:relative;
+  width:min(420px,92%); background:linear-gradient(180deg,var(--panel),#0a121c);
+  border:1px solid var(--line); border-radius:16px; padding:18px;
+  box-shadow:0 24px 80px rgba(0,0,0,.6);
+}
+/* top-right X to dismiss an overlay even when the bottom button scrolls off */
+.closeX{
+  position:absolute; top:10px; right:10px; width:32px; height:32px;
+  display:flex; align-items:center; justify-content:center;
+  border-radius:9px; border:1px solid var(--line);
+  background:#0c1623; color:var(--ink); font-size:16px; line-height:1;
+  cursor:pointer; z-index:2;
+  transition:border-color .12s ease, color .12s ease, transform .06s ease;
+}
+.closeX:hover{ border-color:var(--cyan); color:var(--cyan); }
+.closeX:active{ transform:translateY(1px); }
+
+/* shake / ball action box, sits beside the arrow buttons */
+.shakebox{
+  appearance:none; cursor:pointer; text-align:center;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  min-width:88px; padding:9px 10px; border-radius:14px;
+  border:1px solid var(--line); color:var(--ink);
+  background:linear-gradient(180deg,#12202f,#0a131e);
+  box-shadow:0 2px 0 rgba(0,0,0,.5);
+  transition:border-color .15s ease, box-shadow .15s ease, color .15s ease, opacity .15s ease;
+}
+.shakebox:active{ transform:translateY(1px); }
+.shakebox .sbtop{ font-size:11px; font-weight:700; letter-spacing:.5px; line-height:1; }
+.shakebox .sbsub{ font-size:8.5px; color:var(--muted); letter-spacing:.5px; line-height:1.1; }
+.shakebox.ready{ border-color:var(--lime); }
+.shakebox.ready .sbtop{ color:var(--lime); }
+.shakebox.cool{ opacity:.6; }
+.shakebox.enable{ border-color:var(--cyan); }
+.shakebox.enable .sbtop{ color:var(--cyan); }
+.shakebox.ball{
+  border-color:var(--danger); color:#ffd0d8;
+  box-shadow:0 0 16px rgba(255,77,109,.35);
+}
+.shakebox.ball .sbtop{ color:var(--danger); text-shadow:0 0 10px rgba(255,77,109,.7); }
+.shakebox.ball .sbsub{ color:#e79aa8; }
+/* SLASH + FIRE sit together; FIRE is a dedicated ball control (works on desktop) */
+.actions{ display:flex; flex-direction:column; gap:6px; }
+.actions .shakebox{ width:100%; min-width:88px; }
+.shakebox.ballbtn{ border-color:var(--line); }
+.shakebox.ballbtn .sbtop{ color:var(--muted); }
+.shakebox.ballbtn.ball{ border-color:var(--danger); color:#ffd0d8; box-shadow:0 0 16px rgba(255,77,109,.35); }
+.shakebox.ballbtn.ball .sbtop{ color:var(--danger); text-shadow:0 0 10px rgba(255,77,109,.7); }
+.shakebox:disabled{ opacity:.4; cursor:not-allowed; box-shadow:none; }
+.shakebox:disabled .sbtop{ color:var(--muted); text-shadow:none; }
+/* account → settings block */
+.settings{ border-top:1px dashed var(--line); margin-top:12px; padding-top:12px; }
+.card h2{ font-family:var(--display); font-size:15px; color:var(--lime); margin:2px 0 10px; text-shadow:0 0 14px rgba(182,255,58,.4); }
+.card h2.win{ color:var(--gold); text-shadow:0 0 14px rgba(255,207,58,.5); }
+.card h2.lose{ color:var(--danger); text-shadow:0 0 14px rgba(255,77,109,.5); }
+.card p{ font-size:12px; line-height:1.55; color:var(--ink); margin:6px 0; }
+.card .legend{ font-size:11.5px; color:var(--muted); line-height:1.7; margin:8px 0; }
+.card .legend b{ color:var(--ink); }
+.dot{ display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; margin-right:4px; }
+
+/* ---- tabbed info box: header (X + title + tabs) and footer stay put,
+        only the short panel area can ever scroll, so the close button
+        is always reachable on a phone ---- */
+.card.info{ display:flex; flex-direction:column; max-height:min(86dvh,640px); padding-top:14px; }
+.card.info h2{ margin:0 0 10px; padding-right:34px; }
+.tabbar{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; flex:0 0 auto; }
+.tab{
+  appearance:none; cursor:pointer; flex:1 1 auto;
+  font-family:var(--ui-font); font-size:10.5px; letter-spacing:.3px; white-space:nowrap;
+  color:var(--muted); background:#0a131e; border:1px solid var(--line);
+  padding:7px 6px; border-radius:9px;
+  transition:border-color .12s ease, color .12s ease, background .12s ease;
+}
+.tab:hover{ border-color:var(--cyan); color:var(--cyan); }
+.tab.active{ color:#04121a; background:linear-gradient(180deg,var(--cyan),#1ab8da); border-color:transparent; font-weight:700; }
+.tabwrap{ flex:1 1 auto; min-height:0; overflow:auto; -webkit-overflow-scrolling:touch; }
+.tabpanel{ display:none; }
+.tabpanel.active{ display:block; }
+.tabpanel .legend{ margin-top:0; }
+.card.info .footer{ flex:0 0 auto; margin-top:12px; gap:8px; }
+.card.info .footer .btn{ flex:1 1 auto; }
+
+/* ---- credits / about splash ---- */
+.card.credits{ display:flex; flex-direction:column; max-height:min(90dvh,700px); padding-top:14px; width:min(460px,94%); overflow:auto; }
+.credits-logo{ width:100%; margin:0 0 10px; flex:0 0 auto; }
+.credits-logo svg{ width:100%; height:auto; display:block; border-radius:12px; border:1px solid var(--line); }
+.credits-canvas{ width:100%; height:min(240px,42dvh); display:block; border-radius:12px; background:#0a1019; border:1px solid var(--line); flex:0 0 auto; }
+.credits-by{ text-align:center; font-size:12px; color:var(--muted); margin:12px 0 0; line-height:1.5; }
+.credits-by b{ color:var(--lime); font-size:15px; letter-spacing:.6px; text-shadow:0 0 12px rgba(182,255,58,.4); }
+.credits-by .sub{ display:block; font-size:10px; color:var(--muted); margin-top:6px; opacity:.8; }
+.iconbtn.credits.on{ border-color:var(--lime); color:var(--lime); box-shadow:0 0 10px rgba(182,255,58,.25); }
+
+.iconbtn{
+  width:40px; height:40px; flex:0 0 auto; border-radius:12px;
+  border:1px solid var(--line); background:#0c1623; color:var(--ink);
+  font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+.iconbtn.acct.on{ border-color:var(--green); color:var(--green); box-shadow:0 0 10px rgba(57,255,155,.25); }
+.iconbtn.music.on{ border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 10px rgba(52,225,255,.28); }
+.iconbtn.music.off{ color:var(--muted); }
+
+/* account form fields */
+.afield{ display:flex; flex-direction:column; gap:4px; margin:8px 0; }
+.alab{ font-size:10px; color:var(--muted); letter-spacing:.5px; }
+.ainput{
+  font-family:var(--ui-font); font-size:13px; color:var(--ink);
+  background:#0a131e; border:1px solid var(--line); border-radius:9px;
+  padding:9px 10px; width:100%; outline:none;
+  -webkit-user-select:text; user-select:text;
+}
+.ainput:focus{ border-color:var(--cyan); box-shadow:0 0 0 2px rgba(52,225,255,.18); }
+.aerr{ min-height:14px; font-size:11px; color:var(--danger); margin:4px 0 0; }
+.amsg{ font-size:11px; color:var(--green); margin:4px 0 0; }
+.tag{
+  display:inline-block; font-size:9px; letter-spacing:1px; font-weight:700;
+  color:#04121a; background:var(--gold); padding:2px 7px; border-radius:999px;
+  margin-left:6px; vertical-align:middle;
+}
+.storenote{ font-size:10px; color:var(--muted); margin-top:8px; opacity:.85; }
+
+/* ============================================================
+   DESKTOP DIFFERENCES
+   Applied on wide / fine-pointer devices. Key changes:
+     • cabinet frame, centered, max-width, two-column layout
+     • board on the left, persistent info/controls panel on the right
+     • hover states enabled, larger D-pad with glow on hover
+     • keyboard hint block becomes visible
+   ============================================================ */
+@media (min-width:900px) and (pointer:fine){
+  .app{
+    max-width:1180px; margin:0 auto; height:100dvh;
+    flex-direction:row; align-items:stretch; gap:14px;
+    padding:18px;
+  }
+  /* left column holds top HUD + board */
+  .stage{ display:flex; flex-direction:column; gap:12px; flex:1 1 auto; min-width:0;
+          background:linear-gradient(180deg,var(--cabinet),#080d15);
+          border:1px solid var(--line); border-radius:20px; padding:14px;
+          box-shadow:0 30px 90px rgba(0,0,0,.55), 0 0 0 1px rgba(52,225,255,.04) inset; }
+  .brand .title{ font-size:16px; }
+  .brand .sub{ font-size:11px; }
+  .chip{ min-width:58px; }
+  .chip b{ font-size:16px; }
+
+  /* right column = persistent control/info panel */
+  .controls{
+    flex:0 0 320px; flex-direction:column; align-items:stretch; gap:14px;
+    background:linear-gradient(180deg,var(--panel),#0a121c);
+    border:1px solid var(--line); border-radius:20px; padding:16px;
+    box-shadow:0 30px 90px rgba(0,0,0,.5);
+    height:100%; overflow:auto;
+  }
+  .dpad{ --d:62px; margin:0 auto; }
+  .shakebox{ width:100%; }
+  .dbtn{ font-size:26px; }
+  .dbtn:hover{ border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 16px rgba(52,225,255,.35); }
+  .dbtn.center{ font-size:13px; }
+  .side{ margin:0; }
+  .btn:hover{ border-color:var(--cyan); color:var(--cyan); }
+  .btn.primary:hover{ color:#04121a; }
+  .kbd{
+    display:block; font-size:11px; color:var(--muted); line-height:1.9;
+    border-top:1px dashed var(--line); padding-top:12px;
+  }
+  .kbd .k{
+    display:inline-block; min-width:22px; text-align:center;
+    padding:2px 6px; margin:0 2px; border-radius:6px;
+    background:#0a131e; border:1px solid var(--line); color:var(--ink);
+    font-size:10.5px;
+  }
+  .desktop-only-title{ display:block; }
+}
+/* hide the on-canvas mobile hint when there's room for the panel */
+@media (min-width:900px) and (pointer:fine){
+  .statusline{ font-size:11px; }
+}
+
+/* ============================================================
+   PHONE — LANDSCAPE
+   Header becomes a vertical strip on the LEFT, the buttons/controls
+   become a vertical strip on the RIGHT, board sits in the middle.
+   Gated on pointer:coarse so short desktop windows are unaffected.
+   ============================================================ */
+@media (orientation:landscape) and (max-height:600px) and (pointer:coarse){
+  .app{
+    flex-direction:row; align-items:stretch; gap:8px; padding:6px;
+    padding-left:max(6px, env(safe-area-inset-left));
+    padding-right:max(6px, env(safe-area-inset-right));
+  }
+  /* stage holds [vertical topbar | board] side by side */
+  .stage{ display:flex; flex-direction:row; gap:8px; flex:1 1 auto; min-width:0; background:none; border:0; padding:0; box-shadow:none; }
+
+  /* topbar -> left vertical rail */
+  .topbar{
+    flex-direction:column; align-items:center; gap:8px;
+    width:72px; flex:0 0 72px; height:100%; padding:8px 6px; overflow:auto;
+  }
+  .brand{ align-items:center; text-align:center; }
+  .brand .title{ font-size:11px; writing-mode:vertical-rl; text-orientation:mixed; letter-spacing:1px; }
+  .brand .sub{ display:none; }
+  .timers{ flex-direction:column; margin-left:0; gap:6px; width:100%; }
+  .chip{ width:100%; min-width:0; padding:5px 4px; }
+  .chip b{ font-size:14px; }
+  .nextdir{ width:48px; height:48px; margin-top:auto; }
+
+  .board-wrap{ flex:1 1 auto; min-width:0; }
+
+  /* controls -> right vertical rail */
+  .controls{
+    flex-direction:column; align-items:stretch; gap:10px;
+    width:152px; flex:0 0 152px; height:100%; overflow:auto;
+    background:linear-gradient(180deg,var(--panel),#0a121c);
+    border:1px solid var(--line); border-radius:14px; padding:10px;
+  }
+  .dpad{ --d:38px; margin:0 auto; }
+  .shakebox{ width:100%; }
+  .side{ margin:0; }
+  .side .row{ flex-direction:column; align-items:stretch; }
+  .btn{ font-size:11px; }
+  input[type=range]{ width:100%; }
+  .kbd{ display:none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- STAGE (top HUD + board). On desktop this is the left cabinet column. -->
+  <div class="stage">
+    <div class="topbar">
+      <div class="brand">
+        <div class="title">NEON&nbsp;MAZE</div>
+        <div class="sub">finger-drawn maze runner</div>
+      </div>
+      <div class="timers">
+        <div class="chip lvl"><b id="t-level">1</b><span>LVL</span></div>
+        <div class="chip stamp"><b id="t-stamp">30</b><span>STAMP</span></div>
+        <div class="chip hog"><b id="t-hog">24</b><span>HOG</span></div>
+        <div class="chip fire"><b id="t-fire">12</b><span>FIRE</span></div>
+        <div class="chip patch"><b id="t-patch">16</b><span>PATCH</span></div>
+        <div class="chip blob"><b id="t-blob">--</b><span>BLOB</span></div>
+      </div>
+      <div class="nextdir idle" id="nextdir" title="Your next turn"><div class="arrow" id="nextArrow">•</div></div>
+    </div>
+
+    <div class="board-wrap">
+      <canvas id="game"></canvas>
+      <div class="statusline" id="status">Tap a quadrant to steer • tap centre to stop/go</div>
+
+      <!-- overlays live inside the board area -->
+      <div class="overlay" id="winOverlay">
+        <div class="card">
+          <h2 class="win">★ LEVEL <span id="winLevel">1</span> CLEAR ★<span class="tag" id="winBestTag" style="display:none;">NEW BEST</span></h2>
+          <p>Threaded it in <b id="winTime">0:00</b> &nbsp;·&nbsp; best <b id="winBest">0:00</b>. The next maze is tougher.</p>
+          <p class="legend">Every 5 levels the camera zooms in one notch and the blackouts get longer, narrower and more frequent — plus more fire-starters, hedgehogs and patchers. Your route is flashed once at the start; memorise it.</p>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn primary" id="winNext" data-key="n">Next level →<span class="kc">N</span></button>
+            <button class="btn" id="winRestart" data-key="1">Restart at 1<span class="kc">1</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="overOverlay">
+        <div class="card">
+          <h2 class="lose">✖ LINE CROSSED ✖</h2>
+          <p>You ran the line back over itself on <b>level <span id="overLevel">1</span></b>.</p>
+          <p class="legend">The glow can never re-enter a tile it has already drawn. Reach the exit without crossing your own line — and don't get cornered into doubling back.</p>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn primary" id="overRetry" data-key="r">Retry level<span class="kc">R</span></button>
+            <button class="btn" id="overRestart" data-key="1">Restart at 1<span class="kc">1</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="infoOverlay">
+        <div class="card info">
+          <button class="closeX" id="infoX" aria-label="Close">✕</button>
+          <h2>HOW TO PLAY</h2>
+          <div class="tabbar" id="infoTabs">
+            <button class="tab active" data-tab="basics">Basics</button>
+            <button class="tab" data-tab="controls">Controls</button>
+            <button class="tab" data-tab="hazards">Hazards</button>
+            <button class="tab" data-tab="items">Items</button>
+            <button class="tab" data-tab="modes">Modes</button>
+            <button class="tab" data-tab="difficulty">Difficulty</button>
+            <button class="tab" data-tab="levels">Levels</button>
+          </div>
+
+          <div class="tabwrap">
+            <div class="tabpanel active" data-panel="basics">
+              <p>A glowing line draws from the entrance, but it <b>won't move until you steer</b>. You queue the next turn and the line takes it at the next junction where that turn is possible.</p>
+              <p class="legend">
+                <b>Start:</b> each maze opens with a 1-second countdown that flashes the whole route — memorise it, then steer to begin. The preview gets shorter every 5 levels.<br>
+                <b>Goal:</b> thread the line from the green entrance to the gold exit without ever crossing the line you've drawn.
+              </p>
+            </div>
+
+            <div class="tabpanel" data-panel="controls">
+              <p class="legend">
+                <b>Steer (touch):</b> tap the maze in the direction you want — top / bottom / left / right quadrant.<br>
+                <b>Stop / go:</b> tap the centre of the maze, or the centre of the D-pad — this halts your line, but hazards keep moving.<br>
+                <b style="color:var(--cyan)">Pause:</b> the <b>&#9208;</b> button (or the <b>P</b> key) freezes <i>everything</i> — handy on mobile. Tap the board, the button, or press P to resume.<br>
+                <b>D-pad:</b> the four arrows below do the same as the quadrants.<br>
+                <b>Desktop:</b> arrow keys / WASD to steer, <b>Space</b> to stop &amp; go.
+              </p>
+              <p class="legend" style="border-top:1px dashed var(--line);padding-top:10px;">
+                <b style="color:var(--lime)">Slash grass / snuff fire:</b> the <b>SLASH</b> box (or a phone shake, or the <b>B</b> key) cuts back every grass tile — and if fire is right in front of you it beats out the flames so you don't have to wait for them to burn out.<br>
+                <b style="color:var(--danger)">Fire a ball:</b> when you're carrying one, the <b>● FIRE</b> box beside SLASH (or the <b>F</b> key, or a shake) launches it toward the exit.<br>
+                <b style="color:var(--cyan)">iPhone:</b> tap the SHAKE box once at the start to allow motion access.
+              </p>
+            </div>
+
+            <div class="tabpanel" data-panel="hazards">
+              <p class="legend">
+                <span class="dot" style="background:var(--lime)"></span><b>Stamp:</b> a 3–5 cell patch is rewritten — may open new routes or wall you in.<br>
+                <span class="dot" style="background:#e2a978"></span><b>Hedgehogs</b> patrol the <b>walls</b> and punch fresh holes through them, opening corridors.<br>
+                <span class="dot" style="background:#b07cff"></span><b>Patchers</b> are the inverse — they ride the walls and <b>seal corridors behind you</b>, shrinking your escape routes. Keep moving.<br>
+                <span class="dot" style="background:var(--fire)"></span><b>Fire-starters</b> ride the walls and ignite the corridor beside them; a burning tile blocks passage for a while.<br>
+                <span style="color:#b07cff;font-weight:700;">▷ One-way gates:</span> violet chevrons you can only pass in the arrow's direction. Commit — there's no easy way back.<br>
+                <span class="dot" style="background:#ffd23f"></span><b>Torch blob:</b> a grey orb that blinks yellow like a dying torch. It comes from the far side and homes straight at you — if it reaches you, your vision collapses to a small patch for a few seconds. Keep moving so it can't catch you.<br>
+                <span class="dot" style="background:var(--cyan)"></span><b>Teleport pad:</b> a cyan-lime swirl that sits at the tip of a dead end for 12s, then hops to the next dead end. Step onto it and it whisks you to a nearby corridor that's actually on the way out.
+              </p>
+            </div>
+
+            <div class="tabpanel" data-panel="items">
+              <p class="legend">
+                <span class="dot" style="background:var(--green)"></span><b>Grass:</b> tiles sprout turf that thickens over time; a fully overgrown tile blocks passage. A <b>shake slashes every grass tile by 20%</b> (allowed every 15s) — enough to clear a maxed-out tile.<br>
+                <span class="dot" style="background:var(--danger)"></span><b>Ball:</b> roll over a glowing red ball to collect it. With a ball, a <b>shake fires it toward the exit</b> — the route flashes red for 3s and always points the true way out, <b>even back behind you</b> if you've wandered into a dead end. If you're boxed in it <b>smashes through created walls</b> to reopen a path. The box by the arrows turns red when you're holding one.
+              </p>
+            </div>
+
+            <div class="tabpanel" data-panel="modes">
+              <p class="legend">
+                <b style="color:var(--lime)">Game mode (default).</b> The maze <b>size &amp; shape scale with your level</b>, and difficulty ramps automatically — no options to set. Hint and line speed live in <b style="color:var(--ink)">Account ⟶ Settings</b>.<br>
+                <b style="color:var(--cyan)">Custom mode.</b> Tap <b>Mode</b> (or press <b>G</b>) to switch. You pick the <b>size</b> (6–36) and <b>shape</b> — square, circle or hexagon — and play that same maze type each round.<br>
+                <b style="color:var(--cyan)">Two-level test (Custom only).</b> Custom mode adds a <b>Two-level mazes</b> button you can tap to cycle the variants without grinding levels: <b>Off → sealed (easy) → 2 linked → 3 linked</b>. "Sealed" is the four-quadrant version; "2/3 linked" open walls between the non-exit quadrants (the exit quadrant always stays sealed). (In Game mode these arrive on their own — see <b>Difficulty</b>.)<br>
+              </p>
+            </div>
+
+            <div class="tabpanel" data-panel="difficulty">
+              <p class="legend">
+                <b style="color:#9fb6cc;">Tiers every 5 levels.</b> Difficulty steps up at levels <b>6, 11, 16, 21…</b> — each tier brings a bigger, busier maze.<br>
+                <b style="color:var(--cyan)">Maze size</b> grows with your level (up to 36×36), and one maze in every five is a <b>shaped</b> maze — circle or hexagon.<br>
+                <b style="color:#9fb6cc;">Zoom</b> tightens by one cell per tier (capped at tier 4), so you see less of the maze the deeper you go.<br>
+                <b style="color:#ffd23f;">Torch blob &amp; blackouts</b> get longer and the clear patch around you shrinks at higher tiers. They're spaced well apart early on and only close up gradually.<br>
+                <b style="color:var(--lime)">More hazards.</b> Hedgehogs, fire-starters, patchers, grass and balls all grow in number and speed as you climb.<br>
+                <b style="color:var(--cyan)">Two-level mazes — from level 20.</b> The surface splits into four quadrants you can't normally walk between. Drop down a <b>tunnel</b>, thread the underground maze to one of its three tunnels back up, and surface in a new quadrant. Only one quadrant holds the exit; the rest are red herrings on dead-end spurs. The route flash, hint (H) and fired ball point to the nearest useful tunnel, or the exit once you're in the right quadrant.<br>
+                <b style="color:var(--cyan)">Two-level gets harder.</b> Levels 20–29 keep all four quadrants <b>sealed</b>. From level 30 a wall opens <b>between two</b> of the non-exit quadrants; from level 40 <b>all three</b> non-exit quadrants link up. The <b>exit quadrant always stays sealed</b> — it can only ever be entered from underground — so you may have to drop down, surface, cross to another tunnel and drop again before you finally come up in the right quadrant.<br>
+                <b style="color:#ffd23f;">The clue.</b> Watch the opening count-in: the <b>correct tunnel crackles electric-yellow three times</b>. That's the one whose underground landing leads to the exit quadrant — memorise its position. The faint <b>hint route</b> (H) points the way to a tunnel too. There's always a second corridor to the correct tunnel, so a single blocked path can't strand you.<br>
+                <b style="color:#9fb6cc;">Opening route-flash</b> shows for <b>1 second</b> at the start and shortens by <b>0.1s every 5 levels</b> (down to 0.2s) — memorise fast.<br>
+              </p>
+            </div>
+
+            <div class="tabpanel" data-panel="levels">
+              <p class="legend">
+                <b style="color:var(--danger)">Never cross your own line.</b> The glow can't re-enter a tile it has already drawn — touch it and the level ends. Doubling back into a dead end counts as crossing.<br>
+                <b style="color:var(--cyan)">Levels &amp; saving.</b> Reach the exit to advance. Progress saves on this device, and you can make a local account to keep it.<br>
+                <b>Retry replays the same maze.</b> After a loss, <b>Retry level</b> rebuilds the exact maze you just played (same layout, gates and starting positions) so you can have another go. <b>New maze</b> gives a fresh one instead.<br>
+                <span class="dot" style="background:var(--green)"></span> entrance &nbsp; <span class="dot" style="background:var(--gold)"></span> exit
+              </p>
+            </div>
+          </div>
+
+          <div class="row footer">
+            <button class="btn" id="infoPrev" data-key="arrowleft">‹ Back<span class="kc">←</span></button>
+            <button class="btn primary" id="infoNext" data-key="arrowright">Next ›<span class="kc">→</span></button>
+            <button class="btn" id="infoClose" data-key="g">Got it<span class="kc">G</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overlay" id="acctOverlay">
+        <div class="card">
+          <h2 id="acctTitle">ACCOUNT</h2>
+          <div id="acctLoggedOut">
+            <p class="legend">Make a local account to save your level progress. It's kept only in this browser — there's no server, so please don't reuse a real password.</p>
+            <div class="afield"><label class="alab" for="acctUser">USERNAME</label><input class="ainput" id="acctUser" data-autofocus autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="24" placeholder="player1"></div>
+            <div class="afield"><label class="alab" for="acctPass">PASSWORD</label><input class="ainput" id="acctPass" type="password" autocomplete="off" maxlength="64" placeholder="••••••"></div>
+            <p class="aerr" id="acctErr"></p>
+            <div class="row" style="margin-top:6px;">
+              <button class="btn primary" id="acctLogin" data-key="l">Log in<span class="kc">L</span></button>
+              <button class="btn" id="acctRegister" data-key="c">Create account<span class="kc">C</span></button>
+              <button class="btn" id="acctGuest" data-key="g" data-esc>Play as guest<span class="kc">G</span></button>
+            </div>
+          </div>
+          <div id="acctLoggedIn" style="display:none;">
+            <p>Signed in as <b id="acctName">—</b>.</p>
+            <p>Saved progress: <b>level <span id="acctLevel">1</span></b> &nbsp;·&nbsp; <span id="acctSize">24×24</span>.</p>
+            <p class="legend">Progress saves automatically each time you clear a level.</p>
+            <div class="row" style="margin-top:6px;">
+              <button class="btn primary" id="acctResume" data-key="r" data-autofocus data-esc>Resume<span class="kc">R</span></button>
+              <button class="btn" id="acctReset" data-key="x">Reset progress<span class="kc">X</span></button>
+              <button class="btn" id="acctLogout" data-key="o">Log out<span class="kc">O</span></button>
+            </div>
+          </div>
+          <div class="settings">
+            <div class="alab" style="margin-bottom:6px;">SETTINGS</div>
+            <div class="row" style="align-items:center;">
+              <span class="lab" style="flex:0 0 auto;">Hint route</span>
+              <button class="btn toggle" id="btnHint" data-key="h">Hint: off<span class="kc">H</span></button>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <label class="lab" style="flex:1 1 auto;">Line speed <span id="spdVal" style="color:var(--cyan)">75</span> px/s
+                <input type="range" id="spd" min="12" max="160" step="1" value="75" style="width:100%;">
+              </label>
+            </div>
+            <p class="legend" style="margin-top:6px;">These are saved with your progress. Hint also toggles with the <b>H</b> key during play.</p>
+          </div>
+          <p class="storenote" id="acctStoreNote"></p>
+        </div>
+      </div>
+
+      <div class="overlay" id="creditsOverlay">
+        <div class="card credits">
+          <button class="closeX" id="creditsX" aria-label="Close">✕</button>
+          <div class="credits-logo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 150" preserveAspectRatio="xMidYMid meet"><style>.wm{font-family:"Arial Narrow","Helvetica Neue",Arial,sans-serif;font-weight:800;letter-spacing:.5px;}</style><defs><filter id="cglow" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="0" stdDeviation="3.4" flood-color="#b6ff3a" flood-opacity="0.95"></feDropShadow><feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#b6ff3a" flood-opacity="0.55"></feDropShadow></filter></defs><rect x="0" y="0" width="520" height="150" fill="#0a1019"></rect><g transform="translate(8,9) scale(1.1)"><g><path d="M 98 65 V 37 A 15 15 0 0 0 83 22 H 37 A 15 15 0 0 0 22 37 V 83 A 15 15 0 0 0 37 98 H 83 A 15 15 0 0 0 98 83 V 83" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 50 22 V 41" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 70 22 V 41" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 35 22 V 35 H 45" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 22 51 H 39" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 84 22 V 47" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 76 60 H 98" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 60 98 V 80" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 39 86 H 64" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 86 98 V 84 H 74" fill="none" stroke="#356b76" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"></path></g><g filter="url(#cglow)"><path d="M 30 74 H 50 V 50 H 70 V 74 H 103" stroke="#b6ff3a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><path d="M 99 61 L 117 74 L 99 87 Z" fill="#b6ff3a" stroke-linejoin="round"></path></g></g><text x="172" y="71" class="wm" font-size="60" fill="#dde8f1">MAZE</text><text x="172" y="129" class="wm" font-size="60" fill="#b6ff3a">SHAKER</text></svg>
+          </div>
+          <canvas id="creditsCanvas" class="credits-canvas"></canvas>
+          <p class="credits-by">A finger-drawn maze runner by<br><b>Toni Eleninovski</b><span class="sub">the cast above takes a bow — line, hedgehog, fire-starter, patcher, grass, ball, torch blob &amp; teleport pad</span></p>
+          <div class="row footer" style="margin-top:10px;">
+            <button class="btn primary" id="creditsClose" data-key="c" data-esc>Close<span class="kc">C</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTROLS. On mobile: a bottom bar. On desktop: a right-hand panel. -->
+  <div class="controls">
+    <div class="kbd">
+      <div style="color:var(--ink);font-weight:700;margin-bottom:6px;">KEYBOARD</div>
+      <span class="k">↑</span><span class="k">↓</span><span class="k">←</span><span class="k">→</span> or
+      <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> &nbsp;steer<br>
+      <span class="k">Space</span> stop / go &nbsp;·&nbsp; <span class="k">P</span> pause &nbsp;·&nbsp; <span class="k">N</span> new maze &nbsp;·&nbsp; <span class="k">H</span> hint &nbsp;·&nbsp; <span class="k">B</span> slash &nbsp;·&nbsp; <span class="k">F</span> fire ball<br>
+      <span class="k">G</span> mode &nbsp;·&nbsp; <span class="k">M</span> music &nbsp;·&nbsp; <span class="k">I</span> how-to &nbsp;·&nbsp; <span class="k">U</span> account &nbsp;·&nbsp; <span class="k">C</span> credits<br>
+      <span style="color:var(--muted);">Pop-ups: <span class="k">Tab</span> move &nbsp;<span class="k">Enter</span>/<span class="k">Space</span> press &nbsp;<span class="k">Esc</span> close — or tap the key shown on each button.</span>
+    </div>
+
+    <div class="dpad" id="dpad">
+      <button class="dbtn up"     data-dir="up"     aria-label="Up">▲</button>
+      <button class="dbtn left"   data-dir="left"   aria-label="Left">◀</button>
+      <button class="dbtn center" data-act="stop"   aria-label="Stop / Go">GO</button>
+      <button class="dbtn right"  data-dir="right"  aria-label="Right">▶</button>
+      <button class="dbtn down"   data-dir="down"   aria-label="Down">▼</button>
+    </div>
+
+    <div class="actions">
+      <button class="shakebox ready" id="shakeBox" title="Shake / slash grass &amp; snuff nearby fire (key: B)">
+        <div class="sbtop" id="sbTop">SLASH</div>
+        <div class="sbsub" id="sbSub">shake</div>
+      </button>
+      <button class="shakebox ballbtn" id="btnFire" title="Fire ball toward the exit (key: F)" disabled>
+        <div class="sbtop" id="fbTop">● FIRE</div>
+        <div class="sbsub" id="fbSub">need a ball</div>
+      </button>
+    </div>
+
+    <div class="side">
+      <div class="row">
+        <button class="btn primary" id="btnNew" title="New maze (N)">New maze</button>
+        <button class="iconbtn" id="btnPause" title="Pause (P)">&#9208;</button>
+        <button class="iconbtn music on" id="btnMusic" title="Music on/off">&#9835;</button>
+        <button class="iconbtn acct" id="btnAcct" title="Account / save (U)">&#128100;</button>
+        <button class="iconbtn" id="btnInfo" title="How to play (I)">?</button>
+        <button class="iconbtn credits" id="btnCredits" title="Credits (C)">&#9733;</button>
+      </div>
+      <div class="row">
+        <button class="btn toggle on" id="btnMode" title="Switch between Game (auto) and Custom mazes (key: G)">Mode: Game</button>
+      </div>
+      <!-- Custom-mode maze options live here (where Line speed used to be). Hidden in Game mode. -->
+      <div id="customOpts" style="display:none;">
+        <div class="row">
+          <label class="lab">Maze size
+            <select class="btn field" id="selSize">
+              <option value="6">6 × 6 (tiny)</option>
+              <option value="12">12 × 12 (beginner)</option>
+              <option value="18">18 × 18 (easy)</option>
+              <option value="24" selected>24 × 24 (small)</option>
+              <option value="30">30 × 30 (medium)</option>
+              <option value="36">36 × 36 (large)</option>
+            </select>
+          </label>
+          <label class="lab">Maze shape
+            <select class="btn field" id="selShape">
+              <option value="rect" selected>Square</option>
+              <option value="circle">Circle</option>
+              <option value="hex">Hexagon</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <button class="btn toggle" id="btnTwoTest" title="Test the overground/underground two-level mazes at any size (key: G switches mode)">Two-level mazes: Off</button>
+        </div>
+      </div>
+      <div id="gameNote" class="lab" style="opacity:.8;">Game mode — maze size &amp; shape scale with your level. Hint and line speed live in <b style="color:var(--ink)">Account</b> ⟶ Settings.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ============================================================
+   CHIP AUDIO  —  procedural 8-bit beat that lightly underscores play.
+   Seeded from the uploaded clip: ~112 BPM, key of A minor, percussion-led.
+   Pure Web Audio API (pulse-wave bass + noise drums), no files, loops
+   forever, scheduled with a lookahead clock so it never drifts.
+   Starts on the first user gesture (browser autoplay policy) and can be
+   toggled with the ♪ button. The mix is intentionally quiet so it sits
+   UNDER the line-drawing, and it ducks during overlays / blackouts.
+   ============================================================ */
+const ChipAudio = (() => {
+  const BPM = 112;                 // matched to the clip's tempo
+  const BARS = 4;                  // Am – F – C – G, one bar each
+  const STEPS = 16 * BARS;         // 16th-note grid, 64 steps total
+  const SEC16 = 60 / BPM / 4;      // seconds per 16th note
+  const mtof  = m => 440 * Math.pow(2, (m - 69) / 12);
+
+  // chord roots (MIDI): A2, F2, C3, G2  → a gentle i–VI–III–VII loop
+  const ROOTS = [45, 41, 48, 43];
+  // A-minor pentatonic pool for the sparkle/lead blips
+  const PENTA = [69, 72, 74, 76, 79, 81];
+
+  let ctx=null, master=null, busBass=null, busDrums=null, busLead=null;
+  let noiseBuf=null, pulse25=null, pulse12=null;
+  let enabled=true, running=false, unlocked=false;
+  let step=0, nextTime=0, timer=null;
+  let duck=1, duckTarget=1;         // 1 = full, <1 = ducked (overlay/blackout)
+
+  // band-limited pulse wave (Fourier coeffs for a given duty cycle)
+  function makePulse(duty){
+    const n=24, real=new Float32Array(n), imag=new Float32Array(n);
+    for(let i=1;i<n;i++){ imag[i]=(2/(i*Math.PI))*Math.sin(i*Math.PI*duty); }
+    return ctx.createPeriodicWave(real, imag);
+  }
+  function makeNoise(){
+    const len=ctx.sampleRate*0.4, buf=ctx.createBuffer(1,len,ctx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+    return buf;
+  }
+
+  function build(){
+    if(ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) { enabled=false; return; }
+    ctx = new AC();
+    master = ctx.createGain(); master.gain.value = 0.0; master.connect(ctx.destination);
+    // soft master limiter so blips never clip
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value=-18; comp.knee.value=20; comp.ratio.value=8;
+    comp.attack.value=0.003; comp.release.value=0.18;
+    comp.connect(master);
+    busBass  = ctx.createGain(); busBass.gain.value  = 0.55; busBass.connect(comp);
+    busDrums = ctx.createGain(); busDrums.gain.value = 0.65; busDrums.connect(comp);
+    busLead  = ctx.createGain(); busLead.gain.value  = 0.32; busLead.connect(comp);
+    noiseBuf = makeNoise();
+    pulse25  = makePulse(0.25);
+    pulse12  = makePulse(0.125);
+  }
+
+  /* ---- instruments ---- */
+  function kick(t,v){
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(150,t);
+    o.frequency.exponentialRampToValueAtTime(44,t+0.11);
+    g.gain.setValueAtTime(v,t);
+    g.gain.exponentialRampToValueAtTime(0.0008,t+0.17);
+    o.connect(g).connect(busDrums); o.start(t); o.stop(t+0.19);
+  }
+  function snare(t,v){
+    const src=ctx.createBufferSource(); src.buffer=noiseBuf;
+    const bp=ctx.createBiquadFilter(); bp.type='highpass'; bp.frequency.value=1500;
+    const g=ctx.createGain();
+    g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.0008,t+0.12);
+    src.connect(bp).connect(g).connect(busDrums); src.start(t); src.stop(t+0.13);
+  }
+  function hat(t,v){
+    const src=ctx.createBufferSource(); src.buffer=noiseBuf;
+    const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=8000;
+    const g=ctx.createGain();
+    g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.0008,t+0.035);
+    src.connect(hp).connect(g).connect(busDrums); src.start(t); src.stop(t+0.05);
+  }
+  function bass(t,midi,dur,v){
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.setPeriodicWave(pulse25); o.frequency.value=mtof(midi);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v,t+0.006);
+    g.gain.setValueAtTime(v,t+dur*0.65); g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+    o.connect(g).connect(busBass); o.start(t); o.stop(t+dur+0.02);
+  }
+  function blip(t,midi,dur,v){
+    const o=ctx.createOscillator(), g=ctx.createGain();
+    o.setPeriodicWave(pulse12); o.frequency.value=mtof(midi);
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(v,t+0.004);
+    g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
+    o.connect(g).connect(busLead); o.start(t); o.stop(t+dur+0.01);
+  }
+
+  /* ---- pattern for one 16th step ---- */
+  function scheduleStep(s,t){
+    const bar=(s/16)|0, b=s%16, lastBar=(bar===BARS-1);
+    const root=ROOTS[bar];
+
+    // DRUMS — light: kick on 1 & 3, soft snare backbeat, shaker-hats on the &s
+    if(b===0||b===8) kick(t, 0.9);
+    if(b===4||b===12) snare(t, 0.32);
+    if(b===2||b===6||b===10||b===14) hat(t, 0.16);        // off-beat shaker feel
+    if(b%4===0) hat(t, 0.09);                              // faint down-beat tick
+    if(lastBar && (b===13||b===15)) snare(t, 0.22);        // tiny end-of-loop fill
+
+    // BASS — root bounce with an octave lift, kept short and springy
+    if(b===0)  bass(t, root,    SEC16*3, 0.5);
+    if(b===6)  bass(t, root,    SEC16*2, 0.42);
+    if(b===8)  bass(t, root+7,  SEC16*2, 0.40);            // the fifth
+    if(b===14) bass(t, root+12, SEC16*1.5, 0.34);          // octave passing note
+
+    // LEAD — sparkle only on bars 2 & 4 so it never crowds the mix
+    if((bar===1||bar===3)){
+      if(b===2||b===10){ blip(t, PENTA[(s*7)%PENTA.length], SEC16*1.3, 0.5); }
+      if(lastBar && b===15){ blip(t, PENTA[5], SEC16*2, 0.45); }
+    }
+  }
+
+  function loop(){
+    // smooth duck toward target
+    duck += (duckTarget - duck) * 0.12;
+    if(master) master.gain.setTargetAtTime((enabled?0.13:0.0)*duck, ctx.currentTime, 0.05);
+    while(nextTime < ctx.currentTime + 0.12){
+      scheduleStep(step, nextTime);
+      nextTime += SEC16; step=(step+1)%STEPS;
+    }
+    timer=setTimeout(loop, 25);
+  }
+
+  function start(){
+    if(!ctx || running || !enabled) return;
+    running=true; step=0; nextTime=ctx.currentTime+0.06; loop();
+  }
+  function stop(){ running=false; if(timer){ clearTimeout(timer); timer=null; } }
+
+  return {
+    get enabled(){ return enabled; },
+    unlock(){                                    // call from first user gesture
+      if(unlocked || !enabled) return;
+      build();
+      if(!ctx) return;
+      const go=()=>{ unlocked=true; if(enabled) start(); };
+      (ctx.state==='suspended') ? ctx.resume().then(go).catch(go) : go();
+    },
+    toggle(){
+      enabled=!enabled;
+      if(enabled){ build(); if(ctx){ (ctx.state==='suspended'?ctx.resume():Promise.resolve()).then(()=>start()); } }
+      return enabled;
+    },
+    setEnabled(on){ if(on!==enabled) this.toggle(); },
+    duck(amount){ duckTarget = amount; }          // 1=normal, ~0.45=overlay/blackout
+  };
+})();
+
+
+/* ============================================================
+   MUSIC  —  a thin facade the game talks to instead of ChipAudio.
+   On the first user gesture it tries to load an external track at
+   `music/maze.mp3` (relative, so it works on GitHub Pages and from a
+   local folder). If that file is present and playable it becomes the
+   soundtrack; if it's missing or won't decode we fall back to the
+   built-in ChipAudio synth. Either way the ♪ toggle, the level/overlay
+   ducking and the saved-profile flag all keep working unchanged.
+   ============================================================ */
+const Music = (() => {
+  const DIR = 'music/';                // relative -> survives GitHub Pages subfolders
+  const MAXPROBE = 16;                 // probe maze1.mp3 .. maze16.mp3
+  const BASE_VOL = 0.55;               // mp3 playback volume at full (un-ducked)
+  let el=null, tracks=[], scanned=false, scanning=null, unlocked=false;
+  let enabled=true, duckAmt=1;
+  let curLevel=null, curIdx=-1, curUrl=null;
+
+  function applyVol(){ if(el) el.volume = Math.max(0, Math.min(1, BASE_VOL*duckAmt)) * (enabled?1:0); }
+
+  // probe one URL — resolves true only if the file exists and can decode
+  function probe(url){
+    return new Promise(res=>{
+      let done=false; const a=new Audio();
+      const ok=()=>{ if(!done){ done=true; clean(); res(true); } };
+      const no=()=>{ if(!done){ done=true; clean(); res(false); } };
+      function clean(){
+        a.removeEventListener('loadedmetadata',ok);
+        a.removeEventListener('canplaythrough',ok);
+        a.removeEventListener('error',no);
+        clearTimeout(to);
+        try{ a.src=''; }catch(e){}
+      }
+      try{
+        a.preload='metadata';
+        a.addEventListener('loadedmetadata',ok);
+        a.addEventListener('canplaythrough',ok);
+        a.addEventListener('error',no);
+        a.src=url; a.load();
+      }catch(e){ no(); }
+      const to=setTimeout(no, 3500);   // only fires if the request just hangs
+    });
+  }
+  // build the track list once: maze1.mp3, maze2.mp3 … (contiguous), else legacy maze.mp3
+  function scan(){
+    if(scanned) return Promise.resolve(tracks.length);
+    if(scanning) return scanning;
+    scanning=(async()=>{
+      const found=[];
+      for(let i=1;i<=MAXPROBE;i++){
+        const url=DIR+'maze'+i+'.mp3';
+        if(await probe(url)) found.push(url); else break;
+      }
+      if(!found.length && await probe(DIR+'maze.mp3')) found.push(DIR+'maze.mp3');
+      tracks=found; scanned=true;
+      return tracks.length;
+    })();
+    return scanning;
+  }
+
+  function chooseIdx(){                 // pick a track index for the current level if we lack one
+    if(curIdx>=0 && curIdx<tracks.length) return;
+    curIdx = tracks.length ? (Math.random()*tracks.length|0) : -1;
+  }
+  function playCurrent(restart){
+    if(!el){ el=new Audio(); el.loop=true; el.preload='auto'; el.volume=0; }
+    const url=tracks[curIdx];
+    if(!url) return;
+    if(url!==curUrl){ curUrl=url; el.src=url; el.load(); restart=false; }  // new src already starts at 0
+    else if(restart){ try{ el.currentTime=0; }catch(e){} }
+    applyVol();
+    const p=el.play(); if(p&&p.catch) p.catch(()=>{});
+  }
+  function pauseTrack(){ if(el){ try{ el.pause(); }catch(e){} } }
+
+  // ensure a source is chosen and (if enabled) playing. restart=true reseeks to 0.
+  function engage(restart){
+    if(!unlocked || !enabled) return;
+    scan().then(()=>{
+      if(!enabled) return;
+      if(tracks.length){ chooseIdx(); playCurrent(restart); }
+      else { ChipAudio.setEnabled(true); ChipAudio.unlock(); }   // no files -> built-in synth
+    });
+  }
+  function disengage(){ if(tracks.length) pauseTrack(); else ChipAudio.setEnabled(false); }
+
+  return {
+    get enabled(){ return enabled; },
+    get trackCount(){ return tracks.length; },
+    unlock(){ unlocked=true; engage(false); },
+    toggle(){ enabled=!enabled; if(enabled) engage(false); else disengage(); return enabled; },
+    setEnabled(on){ if(on!==enabled) this.toggle(); },
+    duck(amount){ duckAmt=amount; if(tracks.length) applyVol(); else ChipAudio.duck(amount); },
+    // a level (re)started: keep the same track on a retry/new-maze of the SAME level,
+    // pick a fresh random one whenever the level number changes. Restarts the song.
+    newLevel(level){
+      if(level!==curLevel){ curLevel=level; curIdx=-1; }
+      engage(true);
+    },
+    forgetLevel(){ curLevel=null; curIdx=-1; }   // force a fresh pick next newLevel (e.g. restart-at-1)
+  };
+})();
+
+
+/* ============================================================
+   MOTION  —  detects a physical phone shake (up/down or side to side)
+   from the devicemotion stream and calls a handler. On iOS 13+ the
+   sensor needs an explicit permission grant from a user gesture, so the
+   SHAKE box requests it on first tap; elsewhere it arms on first touch.
+   A short internal debounce makes one shake fire exactly once, and the
+   on-screen SHAKE box / B key are always available as a fallback.
+   ============================================================ */
+const Motion = (() => {
+  const THRESH = 22;          // sum-of-axis jerk that counts as a shake
+  const DEBOUNCE = 600;       // ms between accepted shakes
+  let attached=false, last=null, lastFire=0, onShake=null;
+  function handler(e){
+    const a = e.accelerationIncludingGravity || e.acceleration;
+    if(!a) return;
+    const x=a.x||0, y=a.y||0, z=a.z||0;
+    if(last){
+      const d = Math.abs(x-last.x)+Math.abs(y-last.y)+Math.abs(z-last.z);
+      const now = performance.now();
+      if(d>THRESH && now-lastFire>DEBOUNCE){ lastFire=now; if(onShake) onShake(); }
+    }
+    last={x,y,z};
+  }
+  function attach(){ if(attached) return; window.addEventListener('devicemotion', handler); attached=true; }
+  return {
+    get enabled(){ return attached; },
+    available(){ return typeof window.DeviceMotionEvent!=='undefined'; },
+    needsPermission(){ return typeof DeviceMotionEvent!=='undefined' && typeof DeviceMotionEvent.requestPermission==='function'; },
+    setShakeHandler(fn){ onShake=fn; },
+    enable(){                                   // call from a user gesture
+      if(attached || !this.available()) return;
+      if(this.needsPermission()){
+        DeviceMotionEvent.requestPermission().then(s=>{ if(s==='granted') attach(); }).catch(()=>{});
+      } else { attach(); }
+    }
+  };
+})();
+
+
+/* ============================================================
+   TUNABLE CONSTANTS  (the spec's numbers live here)
+   Most hazard values are no longer fixed — they scale with the
+   level via difficultyFor() below, between an easy floor (level 1)
+   and a hard ceiling (reached at DIFF_RAMP and held thereafter).
+   ============================================================ */
+const FIRE_DURATION = 12;   // base seconds a fire blocks a tile (level 1)
+let   SPEED_PX      = 75;   // player line speed in px/s (slider adjustable, 12..160)
+
+/* shake-driven mechanics */
+const GRASS_BLOCK    = 1.0;   // growth at/above which a turf tile is impassable
+const MOW_AMOUNT     = 0.20;  // growth shaved off every grass tile per shake (20%)
+const SHAKE_COOLDOWN = 15;    // seconds between grass mows
+const BALL_FLASH     = 3.0;   // seconds the fired ball's red route stays lit
+
+const MAX_LEVEL = 10000;    // endless-ish cap
+const DIFF_RAMP = 40;       // level at which maximum difficulty is reached
+
+// Everything that ramps with difficulty. p: 0 at level 1 -> 1 at DIFF_RAMP.
+function difficultyFor(L){
+  const p  = Math.min(1, Math.max(0,(L-1)/(DIFF_RAMP-1)));
+  const lp = (a,b)=> a+(b-a)*p;          // lerp
+  const ri = (a,b)=> Math.round(lp(a,b)); // lerp -> int
+  return {
+    hogCount:    ri(1, 3),      // number of wall hedgehogs
+    fireCount:   ri(1, 4),      // number of fire-starters
+    patcherCount:ri(1, 2),      // number of wall patchers (inverse hedgehog)
+    stampEvery:  lp(30, 12),    // seconds between maze-stamp drops
+    hogEvery:    lp(24,  9),    // seconds between hedgehog wall-ploughs
+    fireEvery:   lp(12,  5),    // seconds between fire ignitions
+    patchEvery:  lp(16,  7),    // seconds between patcher corridor-seals
+    fireDur:     lp(12, 16),    // seconds a fire blocks a tile
+    hogReach:    ri(3,  6),     // wall holes punched per plough
+    patchReach:  ri(1,  3),     // corridor tiles sealed per patch
+    harder:      lp(0.40, 0.65),// chance a stamp blocks rather than opens
+    hogSpeed:    lp(4.2, 6.5),  // hedgehog roam speed (tiles/sec)
+    fstSpeed:    lp(5.0, 7.5),  // fire-starter roam speed (tiles/sec)
+    patcherSpeed:lp(3.6, 6.0),  // patcher roam speed (tiles/sec)
+    grassEvery:  lp(11,  6),    // seconds between turf sprouts
+    grassSprout: ri(1,  2),     // tiles seeded with turf per sprout
+    grassGrow:   lp(0.05,0.10), // growth per second (≈10–20s to fully overgrow)
+    ballEvery:   lp(19, 25),    // seconds between collectible-ball spawns
+  };
+}
+
+/* ---------- difficulty TIERS (the "two new difficulties every 5 levels") ----------
+   tier 0 = levels 1-5, tier 1 = 6-10, ... Two axes step on tiers:
+     • ZOOM   — the camera tightens one cell per dimension per tier, capped at 4.
+     • DARK   — periodic blackouts that get longer, narrower and more frequent.
+   The opening route-flash also shortens by 0.1s per tier.                         */
+const ZOOM_MAX = 4;
+function tierOf(L){ return Math.floor((L-1)/5); }
+function zoomLevel(L){ return Math.min(ZOOM_MAX, tierOf(L)); }
+function flashDur(L){ return Math.max(0.2, 1.0 - 0.1*tierOf(L)); }
+
+// how many non-exit quadrants are linked overground on a two-level level:
+//   0 = all sealed (easy, levels 20-29) — the exit is reached purely underground
+//   1 = two non-exit quadrants linked  (levels 30-39)
+//   2 = all three non-exit linked      (levels 40+)
+// The exit quadrant is never linked, so it always needs the underground.
+function twoConnectFor(L){
+  if(L<TWO_FROM) return 0;
+  const d=L-TWO_FROM;
+  return d<10 ? 0 : d<20 ? 1 : 2;
+}
+
+const DARK_DUR   = [3, 5, 7, 9, 12];   // seconds the lights stay out
+const DARK_INT   = [48,38,30,24,18];   // seconds between blackouts (2x rarer than before)
+const DARK_CELLS = [6, 5, 4, 3, 3];    // size of the clear patch around you
+function darkFor(L){
+  const t=Math.min(DARK_DUR.length-1, tierOf(L));
+  return { dur:DARK_DUR[t], interval:DARK_INT[t], clearCells:DARK_CELLS[t] };
+}
+
+/* ---------- LEVEL-DRIVEN MAZE SIZE ----------
+   Difficulty is carried mostly by the maze SIZE now (used when the size
+   selector is on "Auto"). Levels 1-5 are a gentle beginner band; from level 6
+   the maze eases toward the maximum with shrinking increments, so it keeps
+   getting bigger but the jumps get smaller the closer it is to the ceiling. */
+const SIZE_MIN = 6, SIZE_MAX = 36;          // smallest beginner maze .. biggest maze
+function sizeForLevel(L){
+  if(L<=5) return SIZE_MIN + (L-1)*2;        // 6, 8, 10, 12, 14  (cells per side)
+  const BEGIN=16, DECAY=0.86;                // level-6 size, then ease-out toward SIZE_MAX
+  const s = SIZE_MAX - (SIZE_MAX-BEGIN)*Math.pow(DECAY, L-6);
+  return Math.min(SIZE_MAX, Math.round(s/2)*2);   // keep it even
+}
+
+/* ---------- SHAPED MAZES ----------
+   One maze in every block of 5 levels is a non-rectangular shape, for variety.
+   The shaped slot rotates through the five positions and the shape alternates
+   circle / hexagon per tier. Shapes only kick in once the maze is big enough to
+   actually read as a shape (>= 12 cells), so the tiniest beginner mazes stay
+   rectangular. (The very first shape lands on level 5 — a 14-cell hexagon.) */
+const SHAPE_MIN_CELLS = 12;
+function shapeForLevel(L){
+  const tier=tierOf(L), pos=(L-1)%5;
+  const slot = (tier===0) ? 4 : (tier*2+2)%5;     // which of the 5 levels is shaped
+  if(pos!==slot) return 'rect';
+  if(sizeForLevel(L) < SHAPE_MIN_CELLS) return 'rect';
+  return (tier % 2 === 0) ? 'hex' : 'circle';
+}
+const SHAPE_LABEL = { rect:'square', circle:'circle', hex:'hexagon' };
+
+/* ---------- grid constants ---------- */
+// OPEN = walkable corridor, WALL = solid maze wall (drawn + roamable),
+// VOID = outside the maze shape: never drawn, never walkable, ignored by every
+// hazard. Rectangular mazes contain no VOID; circle/hex mazes are a rectangular
+// grid with the out-of-shape cells marked VOID so the silhouette "floats".
+const WALL = 1, OPEN = 0, VOID = 2;
+const DIRV = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0], none:[0,0] };
+const OPP  = { up:'down', down:'up', left:'right', right:'left', none:'none' };
+const ARROW= { up:'▲', down:'▼', left:'◀', right:'▶', none:'•' };
+
+/* ---------- DOM ---------- */
+const canvas = document.getElementById('game');
+const ctx    = canvas.getContext('2d');
+const boardWrap = document.querySelector('.board-wrap');
+const topbarEl  = document.querySelector('.topbar');
+const statusEl  = document.getElementById('status');
+const nextDirEl = document.getElementById('nextdir');
+const nextArrow = document.getElementById('nextArrow');
+const elStamp = document.getElementById('t-stamp');
+const elHog   = document.getElementById('t-hog');
+const elFire  = document.getElementById('t-fire');
+const elPatch = document.getElementById('t-patch');
+const elBlob  = document.getElementById('t-blob');
+const elLevel = document.getElementById('t-level');
+const shakeBox = document.getElementById('shakeBox');
+const sbTop = document.getElementById('sbTop');
+const sbSub = document.getElementById('sbSub');
+
+/* ============================================================
+   COLORS used on the canvas
+   ============================================================ */
+const C = {
+  floor:'#0a1019', wall:'#21344d', wallEdge:'#2c4a6b',
+  trail:'#34e1ff', head:'#9af3ff',
+  green:'#39ff9b', gold:'#ffcf3a',
+  fireA:'#ffd23f', fireB:'#ff5a1f', fireBlock:'rgba(255,70,31,.16)',
+  hog:'#c08a55', hogDark:'#5f3f24', hogSpike:'#3d2814',
+  fst:'#ffd23f', fstB:'#ff7a1f',
+  patch:'#7c4dff', patchHi:'#ede0ff', patchEdge:'#b07cff', patchSeal:'rgba(124,77,255,.32)',
+  door:'#b07cff', doorGlow:'rgba(176,124,255,.85)',
+  dark:'4,7,12',                 // rgb of the blackout colour (used in rgba())
+  hint:'rgba(52,225,255,.20)', hintFlash:'rgba(120,235,255,.85)', zone:'rgba(120,180,220,.05)'
+};
+
+/* ============================================================
+   GAME STATE
+   ============================================================ */
+let cols=24, rows=24;        // maze cell dimensions
+let W=49, H=49;              // tile dimensions = 2*cells+1
+let grid = new Uint8Array(W*H);
+let tile = 24;               // FIXED world px per tile. Zoom is done with a camera
+                             // scale, so this never changes (walls cache once per maze).
+let dpr  = 1;
+let viewCss = 320;           // square canvas side in CSS px (set by layout)
+
+let entry={x:0,y:0}, exit={x:0,y:0}, entryCell={x:0,y:0};
+let wallPath = null;         // cached Path2D of all wall tiles
+let oneway = new Map();      // "x,y" -> allowed travel direction through a one-way gate
+
+const player = { tx:1, ty:1, dir:'none', want:'none', t:0 };
+let trail = [];              // array of {x,y} tile coords the line has visited
+let visited = null;          // Uint8Array flag: tiles the line has already drawn over
+let stopped=false, gameWon=false, gameOver=false, runTime=0;
+let paused=false;            // full freeze (P / pause button) — distinct from STOP, which only halts the line
+let level=1, diff=difficultyFor(1);
+let levelCells=24, levelShape='rect';   // resolved each startLevel (size/shape actually used)
+let gameMode=true;                      // true = Game (size & shape auto by level); false = Custom
+let pendingShape='rect';                // custom-mode maze shape: 'rect' | 'circle' | 'hex'
+let customTwoLevel=0;                   // custom-mode test toggle: 0 off, else on with connect = customTwoLevel-1
+let levelSnapshot=null;                 // saved build of the current level, so Retry replays it exactly
+
+let fires=[];                // {x,y,ttl,phase}
+let burningSet=new Set();    // "x,y" of burning tiles
+
+let hogs=[], fsts=[], patchers=[];  // wall-roaming entities (scale with level)
+let stampFlash=null;         // {x,y,s,t,harder}
+let sealFlashes=[];          // [{x,y,t}] patcher seal animations
+
+// TELEPORT PADS — a single glowing pad that sits at the very end of a dead end
+// for 12s, then hops to the next dead end and blinks on there. Step onto it and
+// you're whisked to a nearby corridor that's actually on the route to the exit.
+const TELE_PERIOD = 12;      // seconds a pad dwells at one dead end before hopping
+const TELE_FROM   = 4;       // teleport pads start appearing from this level
+let teleEnabled=false;
+let teleport=null;           // {x,y,ttl,i,phase} the live pad
+let deadEnds=[];             // cached [x,y] dead-end tiles it rotates through
+let teleFx=null;             // {x,y,dx,dy,t} brief flash when a pad fires
+
+// TWO-LEVEL MAZES (level >= TWO_FROM) — a 4-quadrant overground maze sitting on
+// top of a single underground maze. The quadrants are sealed off from each other
+// up top; the only way between them is down a tunnel, through the underground,
+// and back up a different tunnel. Exactly one quadrant holds the exit; the rest
+// are dead ends. Both layers share W/H, and every tunnel keeps the same (x,y) on
+// both layers, so a transition is a pure layer-swap in place.
+const TWO_FROM = 20;
+let twoLevel=false;
+let layer='over';            // 'over' | 'under'
+let tunnels=[];              // [{x,y}] x4 — quadrant tunnels == underground landings
+let quadExit=1;              // which quadrant (1..3) actually reaches the exit
+let underGrid=null;          // pristine underground maze (rebuilt fresh each descent)
+let savedOver=null;          // frozen overground state while you're underground
+let transit=null;            // {dir,t,dur,label,swapped} descent / ascent fade
+let tunnelLock=false;        // stops the landing tile bouncing you straight back
+
+let grass=new Map();         // "x,y" -> growth 0..~1.3 (>=GRASS_BLOCK blocks the tile)
+let balls=[];                // [{x,y,phase}] uncollected balls lying in corridors
+let ballCount=0;             // balls the player is holding
+let ballFlash=0;             // seconds of red fired-ball route remaining
+let ballRoute=[];            // [[x,y],...] the route the fired ball lit up
+let mowCool=0;               // seconds until the next grass mow is allowed
+let originalGrid=null;       // snapshot of the freshly-built maze (for ball wall-smash)
+let hintOn=false;
+let dist=null;               // BFS distance-from-exit (for hint + route check)
+let solvable=true;
+
+// start-of-level countdown + route flash (no auto-start: you must steer to move)
+let countdown=0, flashTimer=0, goFlash=0;
+
+// blackouts (the "darker modes" difficulty) — now triggered by the torch blob
+let dark={ active:false, ttl:0, clearCells:6, flash:0 };
+let darkCur={ dur:3, interval:24, clearCells:6 };
+
+// torch blob: a grey/black orb that blinks like a failing torch and homes in on
+// the player along a straight line. When it reaches you, your vision collapses
+// (the blackout). It only appears on tiers where blackouts exist (interval set).
+let blob={ active:false, x:0, y:0, speed:0, phase:0, ttl:0 };
+
+// camera (smoothly eased): focuses a world point at a given scale
+let cam={ scale:1, cx:0, cy:0 };
+let camSnap=false;
+
+const timers = { stamp:diff.stampEvery, hog:diff.hogEvery, fire:diff.fireEvery, patch:diff.patchEvery, dark:24, grass:diff.grassEvery, ball:diff.ballEvery };
+
+/* ============================================================
+   GRID HELPERS
+   ============================================================ */
+const idx=(x,y)=> y*W+x;
+const inB=(x,y)=> x>=0&&y>=0&&x<W&&y<H;
+const isWall=(x,y)=> !inB(x,y) || grid[idx(x,y)]===WALL;
+const isOpen=(x,y)=> inB(x,y) && grid[idx(x,y)]===OPEN;
+const key=(x,y)=> x+','+y;
+const burning=(x,y)=> burningSet.has(key(x,y));
+const grassAt=(x,y)=> grass.get(key(x,y))||0;
+const grassBlocked=(x,y)=> grassAt(x,y) >= GRASS_BLOCK;
+const passable=(x,y)=> isOpen(x,y) && !burning(x,y) && !grassBlocked(x,y);
+const clamp=(v,a,b)=> v<a?a:(v>b?b:v);
+
+// one-way gates: a gate tile may only be ENTERED while travelling in its
+// allowed direction. Leaving it is unrestricted (the next tile's rules apply).
+const doorDir=(x,y)=> oneway.get(key(x,y));
+const clearDoor=(x,y)=>{ if(oneway.size) oneway.delete(key(x,y)); };
+function fwdEdge(fx,fy,tx,ty){            // is the move (fx,fy)->(tx,ty) legal?
+  if(!passable(tx,ty)) return false;
+  const d=oneway.get(key(tx,ty));
+  if(d){ const v=DIRV[d]; if(tx-fx!==v[0] || ty-fy!==v[1]) return false; }
+  return true;
+}
+const passNbr=(x,y,d)=>{ const v=DIRV[d]; return fwdEdge(x,y, x+v[0], y+v[1]); };
+const cx=x=> x*tile + tile/2;       // tile -> pixel centre (world space)
+const cy=y=> y*tile + tile/2;
+
+function openNeighbors(x,y){
+  const out=[];
+  for(const d of ['up','down','left','right']){ const v=DIRV[d]; if(passable(x+v[0],y+v[1])) out.push([x+v[0],y+v[1]]); }
+  return out;
+}
+
+const isVoid=(x,y)=> inB(x,y) && grid[idx(x,y)]===VOID;
+// a wall tile that touches the void is part of the shape's outer shell — hazards
+// leave it alone so the silhouette stays crisp and nothing breaches into nothing.
+const bordersVoid=(x,y)=> isVoid(x-1,y)||isVoid(x+1,y)||isVoid(x,y-1)||isVoid(x,y+1);
+
+// interior wall tile (the light lattice the roamers ride; never the outer border).
+// VOID is value 2, so the ===WALL test already excludes it automatically.
+const isWallTile=(x,y)=> x>=1 && y>=1 && x<=W-2 && y<=H-2 && grid[idx(x,y)]===WALL;
+function wallNeighbors(x,y){
+  const out=[];
+  for(const d of ['up','down','left','right']){ const v=DIRV[d]; if(isWallTile(x+v[0],y+v[1])) out.push([x+v[0],y+v[1]]); }
+  return out;
+}
+
+/* ============================================================
+   MAZE GENERATION  (iterative recursive-backtracker -> perfect maze)
+   ============================================================ */
+function buildMaze(cells, shape){
+  shape = shape || 'rect';
+  cols=rows=cells; W=2*cols+1; H=2*rows+1;
+  grid=new Uint8Array(W*H).fill(WALL);
+
+  const inside = cellInsideFn(shape, cols, rows);   // which cells belong to the shape
+
+  const visited=new Uint8Array(cols*rows);
+  const cIdx=(cxx,cyy)=> cyy*cols+cxx;
+
+  // start the carve from an inside cell (centre-ish, guaranteed valid)
+  let sa=Math.floor(cols/2), sb=Math.floor(rows/2);
+  if(!inside(sa,sb)){
+    outer0: for(let b=0;b<rows;b++) for(let a=0;a<cols;a++)
+      if(inside(a,b)){ sa=a; sb=b; break outer0; }
+  }
+  const stack=[[sa,sb]];
+  visited[cIdx(sa,sb)]=1;
+  grid[idx(2*sa+1,2*sb+1)]=OPEN;
+
+  while(stack.length){
+    const [a,b]=stack[stack.length-1];
+    const opts=[];
+    // only step to neighbours that are inside the shape and unvisited
+    if(b>0      && inside(a,b-1) && !visited[cIdx(a,b-1)]) opts.push([a,b-1,0,-1]);
+    if(b<rows-1 && inside(a,b+1) && !visited[cIdx(a,b+1)]) opts.push([a,b+1,0, 1]);
+    if(a>0      && inside(a-1,b) && !visited[cIdx(a-1,b)]) opts.push([a-1,b,-1,0]);
+    if(a<cols-1 && inside(a+1,b) && !visited[cIdx(a+1,b)]) opts.push([a+1,b, 1,0]);
+    if(!opts.length){ stack.pop(); continue; }
+    const [na,nb,dx,dy]=opts[(Math.random()*opts.length)|0];
+    grid[idx(2*a+1+dx, 2*b+1+dy)]=OPEN;   // knock the wall between the two cells
+    grid[idx(2*na+1, 2*nb+1)]=OPEN;
+    visited[cIdx(na,nb)]=1;
+    stack.push([na,nb]);
+  }
+
+  markVoid(inside);            // everything outside the shape becomes VOID (background)
+  carveEntryExit(inside, shape);
+}
+
+/* cell-inside predicate per shape. (a,b) is a cell index in 0..cols-1 / 0..rows-1.
+   Flat-top hexagon and circle are inscribed in the square grid; their left/right
+   extremes sit on the centre row, which is exactly where entry/exit want to be. */
+function cellInsideFn(shape, cols, rows){
+  if(shape==='rect') return ()=> true;
+  const cxf=(cols-1)/2, cyf=(rows-1)/2;
+  if(shape==='circle'){
+    const R=Math.min(cxf,cyf)+0.5;
+    return (a,b)=>{ const dx=a-cxf, dy=b-cyf; return dx*dx+dy*dy <= R*R; };
+  }
+  // flat-top regular hexagon, circumradius R (vertices on the left & right)
+  const R=Math.min(cxf,cyf), S3=Math.sqrt(3), h=R*S3/2;
+  return (a,b)=>{ const x=Math.abs(a-cxf), y=Math.abs(b-cyf);
+    return y<=h+1e-9 && S3*x+y <= S3*R+1e-9; };
+}
+
+/* mark every tile that lies fully outside the shape as VOID. A tile is "in the
+   shape region" if any cell it touches is inside — that keeps the one-tile wall
+   shell around the carved area (the silhouette) and voids only what's beyond it. */
+function markVoid(inside){
+  const touchesInside=(x,y)=>{
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+      const tx=x+dx, ty=y+dy;
+      if((tx&1) && (ty&1) && tx>=1 && ty>=1 && tx<W-1 && ty<H-1){
+        if(inside((tx-1)>>1,(ty-1)>>1)) return true;
+      }
+    }
+    return false;
+  };
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    if(grid[idx(x,y)]===OPEN) continue;          // carved corridors always stay
+    if(!touchesInside(x,y)) grid[idx(x,y)]=VOID;
+  }
+}
+
+/* entrance on the left extreme, exit on the right extreme. Rect mazes keep the
+   classic random-row openings on the very border; shapes open a notch in the
+   shell at the leftmost / rightmost inside cell (always near the centre row). */
+function carveEntryExit(inside, shape){
+  let ec, xc;
+  if(shape==='rect'){
+    ec=[0, (Math.random()*rows)|0];
+    xc=[cols-1, (Math.random()*rows)|0];
+  } else {
+    const cyf=(rows-1)/2; ec=null; xc=null;
+    for(let a=0;a<cols;a++) for(let b=0;b<rows;b++){
+      if(!inside(a,b)) continue;
+      if(!ec || a<ec[0] || (a===ec[0] && Math.abs(b-cyf)<Math.abs(ec[1]-cyf))) ec=[a,b];
+      if(!xc || a>xc[0] || (a===xc[0] && Math.abs(b-cyf)<Math.abs(xc[1]-cyf))) xc=[a,b];
+    }
+  }
+  const ecx=2*ec[0]+1, ecy=2*ec[1]+1, xcx=2*xc[0]+1, xcy=2*xc[1]+1;
+  grid[idx(ecx,ecy)]=OPEN; grid[idx(xcx,xcy)]=OPEN;
+  entryCell={x:ecx, y:ecy};
+  entry={x:ecx-1, y:ecy};   grid[idx(entry.x,entry.y)]=OPEN;   // notch in the shell
+  exit ={x:xcx+1, y:xcy};   grid[idx(exit.x, exit.y)]=OPEN;
+}
+
+/* ============================================================
+   WALL PATH CACHE + SOLUTION BFS
+   ============================================================ */
+function rebuildWalls(){
+  wallPath=new Path2D();
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++)
+    if(grid[idx(x,y)]===WALL) wallPath.rect(x*tile, y*tile, tile, tile);
+}
+
+// goal tiles the BFS flows out from. Normally just the exit. On a two-level
+// overground layer the four tunnels are goals too, so routing/solvability work
+// even while you're stuck in a quadrant that can't reach the exit on foot — the
+// "way forward" there is the nearest tunnel down.
+function solutionGoals(){
+  if(twoLevel && layer==='over'){
+    const g=[{x:exit.x,y:exit.y}];
+    for(const t of tunnels) g.push({x:t.x,y:t.y});
+    return g;
+  }
+  return [{x:exit.x,y:exit.y}];
+}
+function recomputeSolution(){
+  dist=new Int32Array(W*H).fill(-1);
+  const pi=idx(player.tx,player.ty);
+  const q=[];
+  for(const g of solutionGoals()){ const gi=idx(g.x,g.y); if(dist[gi]!==0){ dist[gi]=0; q.push(gi); } }
+  let head=0;
+  while(head<q.length){
+    const cur=q[head++]; const x=cur%W, y=(cur/W)|0; const d=dist[cur];
+    for(const dd of ['up','down','left','right']){
+      const v=DIRV[dd], nx=x+v[0], ny=y+v[1];
+      if(!inB(nx,ny)) continue;
+      const ni=idx(nx,ny);
+      if(dist[ni]!==-1) continue;
+      if(!passable(nx,ny)) continue;
+      if(visited && visited[ni] && ni!==pi) continue;   // can't route back over your own line
+      if(!fwdEdge(nx,ny,x,y)) continue;                 // one-way gates block the wrong way
+      dist[ni]=d+1; q.push(ni);
+    }
+  }
+  solvable = dist[pi] >= 0;
+}
+
+/* ============================================================
+   ONE-WAY GATES — placed on straight corridor tiles, oriented so you can
+   only pass heading toward the exit (a "commit" you can't undo).
+   ============================================================ */
+function placeDoors(n){
+  oneway=new Map();
+  if(n<=0) return;
+  // door-agnostic distance from exit, to orient each gate "forward"
+  const dd=new Int32Array(W*H).fill(-1);
+  let q=[idx(exit.x,exit.y)]; dd[q[0]]=0; let h=0;
+  while(h<q.length){ const c=q[h++],x=c%W,y=(c/W)|0,d=dd[c];
+    for(const k of ['up','down','left','right']){ const v=DIRV[k],nx=x+v[0],ny=y+v[1];
+      if(inB(nx,ny)){ const ni=idx(nx,ny); if(dd[ni]===-1 && isOpen(nx,ny)){ dd[ni]=d+1; q.push(ni);} } } }
+  // collect straight-corridor candidates (exactly two opposite open neighbours)
+  const cand=[];
+  for(let y=1;y<=H-2;y++) for(let x=1;x<=W-2;x++){
+    if(!isOpen(x,y)) continue;
+    if((x===entry.x&&y===entry.y)||(x===exit.x&&y===exit.y)||(x===entryCell.x&&y===entryCell.y)) continue;
+    const L=isOpen(x-1,y),R=isOpen(x+1,y),U=isOpen(x,y-1),D=isOpen(x,y+1);
+    if(L&&R&&!U&&!D) cand.push([x,y,'h']);
+    else if(U&&D&&!L&&!R) cand.push([x,y,'v']);
+  }
+  for(let i=cand.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=cand[i]; cand[i]=cand[j]; cand[j]=t; }
+  const used=[];
+  for(const [x,y,axis] of cand){
+    if(oneway.size>=n) break;
+    if(used.some(u=> Math.abs(u[0]-x)+Math.abs(u[1]-y) < 4)) continue;  // space them out
+    let dir;
+    if(axis==='h'){ const dl=dd[idx(x-1,y)], dr=dd[idx(x+1,y)]; dir=(dr>=0&&(dl<0||dr<dl))?'right':'left'; }
+    else          { const du=dd[idx(x,y-1)], db=dd[idx(x,y+1)]; dir=(db>=0&&(du<0||db<du))?'down':'up'; }
+    oneway.set(key(x,y), dir);
+    used.push([x,y]);
+  }
+}
+
+// greedy descent down the distance field for the faint hint trail
+function hintRoute(){
+  if(!dist) return [];
+  let x=player.tx, y=player.ty;
+  if(dist[idx(x,y)]<0) return [];
+  const route=[[x,y]]; let guard=0;
+  while(dist[idx(x,y)]>0 && guard++<W*H){     // stop on reaching any goal (exit or tunnel)
+    let best=null, bd=dist[idx(x,y)];
+    for(const dd of ['up','down','left','right']){
+      const v=DIRV[dd], nx=x+v[0], ny=y+v[1];
+      if(!inB(nx,ny) || !fwdEdge(x,y,nx,ny)) continue;   // legal forward step only
+      const nd=dist[idx(nx,ny)];
+      if(nd>=0 && nd<bd){ bd=nd; best=[nx,ny]; }
+    }
+    if(!best) break; x=best[0]; y=best[1]; route.push([x,y]);
+  }
+  return route;
+}
+
+/* ============================================================
+   ROAMERS (hedgehogs + fire-starters) — they ride the WALL lattice
+   (the light tiles), never the dark corridors, so they can never sit
+   on the player's tile. Hedgehogs punch holes through nearby walls;
+   fire-starters light the corridor beside them.
+   ============================================================ */
+// build a roamer object at a specific wall tile (used for replaying a saved level)
+function mkRoamerAt(x,y,speed){ return { tx:x, ty:y, gx:x, gy:y, prevx:x, prevy:y, p:1, speed, facing:[1,0], flash:0, hist:[], seen:new Set(), winT:0 }; }
+
+// find an interior wall tile with somewhere to walk, near (ox,oy) — used when a
+// roamer gets stranded on an isolated single-tile wall or circles a tiny pocket.
+function findWallTileNear(ox,oy,maxR){
+  for(let r=2;r<=maxR;r++){
+    const ring=[];
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;   // only the outer ring at this radius
+      const x=ox+dx, y=oy+dy;
+      if(isWallTile(x,y) && wallNeighbors(x,y).length>0) ring.push([x,y]);
+    }
+    if(ring.length) return ring[(Math.random()*ring.length)|0];
+  }
+  return null;
+}
+// relocate a roamer to a fresh stretch of wall (preferring nearby) and reset its
+// wander memory so it heads off in a new direction.
+function respawnRoamer(r){
+  let t=findWallTileNear(r.tx,r.ty,6);
+  if(!t){ const s=spawnRoamer(r.speed); t=[s.tx,s.ty]; }
+  r.tx=t[0]; r.ty=t[1]; r.gx=t[0]; r.gy=t[1]; r.prevx=t[0]; r.prevy=t[1];
+  r.p=1; r.facing=[1,0]; r.hist=[]; r.seen=new Set(); r.winT=0; r.flash=0.4;
+  roamPickTarget(r);
+}
+function spawnRoamer(speed){
+  // a random interior wall tile that has somewhere to walk
+  let x,y,g=0;
+  do{ x=1+((Math.random()*(W-2))|0); y=1+((Math.random()*(H-2))|0); }
+  while((!isWallTile(x,y) || wallNeighbors(x,y).length===0) && g++<800);
+  if(!isWallTile(x,y)){
+    outer: for(let yy=1;yy<=H-2;yy++) for(let xx=1;xx<=W-2;xx++){
+      if(isWallTile(xx,yy) && wallNeighbors(xx,yy).length){ x=xx; y=yy; break outer; }
+    }
+  }
+  return mkRoamerAt(x,y,speed);
+}
+function roamPickTarget(r){
+  const nb=wallNeighbors(r.tx,r.ty);
+  if(!nb.length){ r.gx=r.tx; r.gy=r.ty; return; }
+  const recent=r.hist||[];
+  // 1) strongly prefer wall tiles we haven't ridden recently -> keeps them
+  //    exploring the whole lattice instead of circling one little pocket.
+  let pool=nb.filter(c=> recent.indexOf(c[0]+','+c[1])<0);
+  // 2) failing that, just avoid the immediate backtrack
+  if(!pool.length) pool=nb.filter(c=> !(c[0]===r.prevx && c[1]===r.prevy));
+  // 3) truly cornered -> take whatever's there
+  if(!pool.length) pool=nb;
+  const c=pool[(Math.random()*pool.length)|0];
+  r.gx=c[0]; r.gy=c[1]; r.facing=[c[0]-r.tx, c[1]-r.ty];
+}
+// watchdog: if a roamer keeps revisiting a tiny set of tiles, it's penned in —
+// relocate it so patchers/hedgehogs/fire-starters don't camp one corner.
+function trackConfinement(r,dt){
+  r.seen.add(r.tx+','+r.ty);
+  r.winT+=dt;
+  if(r.winT>=4){
+    if(r.seen.size<=3) respawnRoamer(r);
+    r.seen=new Set(); r.winT=0;
+  }
+}
+function roamUpdate(r,dt){
+  if(r.flash>0) r.flash=Math.max(0,r.flash-dt);
+  // wall got opened under us, OR we're marooned on an isolated single-tile wall
+  // with no wall neighbours to ride -> respawn on fresh wall nearby.
+  if(!isWallTile(r.tx,r.ty) || wallNeighbors(r.tx,r.ty).length===0){
+    respawnRoamer(r); return;
+  }
+  r.p += r.speed*dt;
+  let guard=0;
+  while(r.p>=1 && guard++<10){
+    r.p-=1; r.prevx=r.tx; r.prevy=r.ty; r.tx=r.gx; r.ty=r.gy;
+    r.hist.push(r.tx+','+r.ty); if(r.hist.length>8) r.hist.shift();   // ring buffer
+    roamPickTarget(r);
+    if(r.gx===r.tx && r.gy===r.ty){ r.p=0; break; }   // stranded this frame
+  }
+  trackConfinement(r,dt);
+}
+const roamPx=r=> ({ x:cx(r.tx)+(cx(r.gx)-cx(r.tx))*r.p, y:cy(r.ty)+(cy(r.gy)-cy(r.ty))*r.p });
+
+// score: how much opening this wall tile would join corridors (opposite-side openings)
+function sepScore(x,y){
+  let s=0;
+  if(passable(x-1,y) && passable(x+1,y)) s++;
+  if(passable(x,y-1) && passable(x,y+1)) s++;
+  return s;
+}
+function ploughOne(h){
+  // open up to hogReach interior wall tiles next to the hedgehog that border a
+  // corridor — punching fresh holes. We never open the hog's own tile, so it
+  // stays on the wall lattice and out of the player's path.
+  const reach=diff.hogReach;
+  let cands=wallNeighbors(h.tx,h.ty).filter(([x,y])=> openNeighbors(x,y).length>=1 && !bordersVoid(x,y) && !nextToTunnel(x,y));
+  // reach further along its facing for longer breaches
+  let fx=h.facing[0]||0, fy=h.facing[1]||0, x=h.tx, y=h.ty;
+  for(let i=0;i<reach;i++){ x+=fx; y+=fy; if(isWallTile(x,y) && openNeighbors(x,y).length>=1 && !bordersVoid(x,y) && !nextToTunnel(x,y)) cands.push([x,y]); }
+  // de-dupe, prefer walls that join two corridors
+  const seen=new Set(); cands=cands.filter(([cx2,cy2])=>{ const k=cx2+','+cy2; if(seen.has(k))return false; seen.add(k); return true; });
+  cands.sort((a,b)=> sepScore(b[0],b[1])-sepScore(a[0],a[1]));
+  let opened=0;
+  for(const [ox,oy] of cands){
+    if(opened>=reach) break;
+    if(isWallTile(ox,oy)){ grid[idx(ox,oy)]=OPEN; opened++; }
+  }
+  h.flash=0.55;
+  if(opened){ rebuildWalls(); recomputeSolution(); }
+}
+function ploughAll(){ for(const h of hogs) ploughOne(h); }
+
+function igniteOne(f){
+  // light a corridor tile adjacent to the fire-starter's wall position
+  const headT=headTile();
+  const ok=openNeighbors(f.tx,f.ty).filter(c=>{
+    if(burning(c[0],c[1])) return false;
+    if(c[0]===player.tx && c[1]===player.ty) return false;   // never the player's tile
+    if(c[0]===headT[0] && c[1]===headT[1]) return false;     // nor the tile they're entering
+    if(c[0]===exit.x && c[1]===exit.y) return false;
+    return true;
+  });
+  if(!ok.length) return;
+  const c=ok[(Math.random()*ok.length)|0];
+  fires.push({x:c[0], y:c[1], ttl:diff.fireDur, phase:Math.random()*6.28});
+  burningSet.add(key(c[0],c[1]));
+  f.flash=0.5;
+  recomputeSolution();
+}
+function igniteFires(){ for(const f of fsts) igniteOne(f); }
+
+/* ============================================================
+   PATCHERS — the inverse of the hedgehog. They ride the wall lattice and
+   SEAL nearby corridor tiles into walls, preferring the area behind the
+   player (farther from the exit) so your escape routes keep shrinking.
+   We never overwrite the drawn line, the player's tile/next tile, the
+   portals, or anything that would make the maze unsolvable.
+   ============================================================ */
+function sealOne(p){
+  const reach=diff.patchReach;
+  const headT=headTile();
+  const pd = dist[idx(player.tx,player.ty)];   // player's distance from exit
+  // candidate corridor tiles next to the patcher + a short reach along its facing
+  let cands=openNeighbors(p.tx,p.ty);
+  let fx=p.facing[0]||0, fy=p.facing[1]||0, x=p.tx, y=p.ty;
+  for(let i=0;i<reach;i++){ x+=fx; y+=fy; if(passable(x,y)) cands.push([x,y]); }
+  const seen=new Set();
+  cands=cands.filter(([cx2,cy2])=>{
+    const k=cx2+','+cy2; if(seen.has(k)) return false; seen.add(k);
+    if(!passable(cx2,cy2)) return false;
+    if(visited && visited[idx(cx2,cy2)]) return false;             // keep the drawn line intact
+    if(cx2===player.tx&&cy2===player.ty) return false;
+    if(cx2===headT[0]&&cy2===headT[1]) return false;
+    if((cx2===entry.x&&cy2===entry.y)||(cx2===exit.x&&cy2===exit.y)) return false;
+    if(Math.max(Math.abs(cx2-player.tx),Math.abs(cy2-player.ty))<2) return false; // small standoff
+    return true;
+  });
+  // behind the player first (greater exit-distance), then deepest
+  cands.sort((a,b)=>{
+    const da=dist[idx(a[0],a[1])], db=dist[idx(b[0],b[1])];
+    const ba=(da>=0&&pd>=0&&da>pd)?0:1, bb=(db>=0&&pd>=0&&db>pd)?0:1;
+    if(ba!==bb) return ba-bb;
+    return db-da;
+  });
+  let sealed=0, changed=false;
+  for(const [ox,oy] of cands){
+    if(sealed>=reach) break;
+    if(!passable(ox,oy)) continue;
+    const wasDoor=oneway.get(key(ox,oy));
+    grid[idx(ox,oy)]=WALL; clearDoor(ox,oy);
+    recomputeSolution();
+    if(!solvable){                                  // would trap the player -> undo
+      grid[idx(ox,oy)]=OPEN; if(wasDoor) oneway.set(key(ox,oy),wasDoor); recomputeSolution(); continue;
+    }
+    sealed++; changed=true;
+    sealFlashes.push({x:ox,y:oy,t:0.6});
+  }
+  p.flash=0.55;
+  if(changed){ rebuildWalls(); recomputeSolution(); }
+}
+function sealAll(){ for(const p of patchers) sealOne(p); }
+
+/* ============================================================
+   TELEPORT PADS — counts the maze's dead ends and rotates one glowing pad
+   between them, 12s each. Landing on it sends you to a nearby corridor that
+   lies on a real path to the exit (a genuine shortcut out of the dead end).
+   ============================================================ */
+// a dead end = an open corridor tile with exactly ONE open neighbour (the tip
+// of a no-through passage). Skip the portals and the player's own start cell.
+function findDeadEnds(){
+  const out=[];
+  for(let y=1;y<=H-2;y++) for(let x=1;x<=W-2;x++){
+    if(!isOpen(x,y)) continue;
+    if((x===entry.x&&y===entry.y)||(x===exit.x&&y===exit.y)||(x===entryCell.x&&y===entryCell.y)) continue;
+    if(twoLevel && tunnels.some(t=> t.x===x && t.y===y)) continue;   // pads never sit on a tunnel mouth
+    let openN=0;
+    if(isOpen(x-1,y))openN++; if(isOpen(x+1,y))openN++;
+    if(isOpen(x,y-1))openN++; if(isOpen(x,y+1))openN++;
+    if(openN===1) out.push([x,y]);   // the very end of a dead-end corridor
+  }
+  return out;
+}
+// move the pad on to the next dead end (recount each time — the maze mutates)
+function hopTeleport(){
+  const prevI = teleport ? teleport.i : -1;
+  deadEnds=findDeadEnds();
+  if(!deadEnds.length){ teleport=null; return; }
+  let i = prevI<0 ? ((Math.random()*deadEnds.length)|0) : ((prevI+1)%deadEnds.length);
+  if(deadEnds.length>1 && deadEnds[i][0]===player.tx && deadEnds[i][1]===player.ty) i=(i+1)%deadEnds.length;
+  const d=deadEnds[i];
+  teleport={ x:d[0], y:d[1], ttl:TELE_PERIOD, i, phase:Math.random()*6.28 };
+}
+// nearest corridor to the pad that is genuinely on a path to the exit and not
+// already part of your drawn line (so you don't land on yourself and lose).
+function teleportDest(){
+  recomputeSolution();
+  for(let r=1;r<=8;r++){
+    let best=null, bestD=Infinity;
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
+      const x=teleport.x+dx, y=teleport.y+dy;
+      if(!inB(x,y) || !passable(x,y)) continue;
+      const di=idx(x,y);
+      if(visited[di]) continue;                    // never onto our own line
+      if(x===exit.x && y===exit.y) continue;
+      if(dist[di]<0) continue;                      // must reach the exit from here
+      if(dist[di]<bestD){ bestD=dist[di]; best=[x,y]; }
+    }
+    if(best) return best;     // take the closest ring that offers a real landing
+  }
+  return null;
+}
+// called the instant the player arrives on a tile (from stepPlayer)
+function teleportCheck(){
+  if(!teleport || player.tx!==teleport.x || player.ty!==teleport.y) return;
+  const dest=teleportDest();
+  if(!dest) return;           // nowhere safe to send right now -> pad just fizzles
+  player.tx=dest[0]; player.ty=dest[1]; player.t=0; player.dir='none'; player.want='none';
+  visited[idx(dest[0],dest[1])]=1;
+  pushTrailJump(dest[0],dest[1]);          // pen-up so the line doesn't streak across the map
+  collectBallAt(dest[0],dest[1]);
+  teleFx={x:teleport.x,y:teleport.y,dx:dest[0],dy:dest[1],t:0.6};
+  hopTeleport();                            // pad relocates immediately after a jump
+  recomputeSolution(); syncNextDir();
+}
+
+/* ============================================================
+   TWO-LEVEL MAZES — overground (4 sealed quadrants) over an underground maze.
+   ============================================================ */
+// carve a perfect maze (recursive backtracker) into grid `g`, confined to the
+// cell rectangle [aMin..aMax] x [bMin..bMax]. Walls between cells outside the
+// rectangle are never touched, so each call yields an isolated sub-maze.
+function carveInto(g, aMin, aMax, bMin, bMax){
+  if(aMax<aMin || bMax<bMin) return;
+  const seen=new Set(), ck=(a,b)=>a+','+b;
+  const sa=aMin+((Math.random()*(aMax-aMin+1))|0), sb=bMin+((Math.random()*(bMax-bMin+1))|0);
+  const stack=[[sa,sb]]; seen.add(ck(sa,sb)); g[idx(2*sa+1,2*sb+1)]=OPEN;
+  while(stack.length){
+    const [a,b]=stack[stack.length-1], opts=[];
+    if(b>bMin && !seen.has(ck(a,b-1))) opts.push([a,b-1,0,-1]);
+    if(b<bMax && !seen.has(ck(a,b+1))) opts.push([a,b+1,0, 1]);
+    if(a>aMin && !seen.has(ck(a-1,b))) opts.push([a-1,b,-1,0]);
+    if(a<aMax && !seen.has(ck(a+1,b))) opts.push([a+1,b, 1,0]);
+    if(!opts.length){ stack.pop(); continue; }
+    const [na,nb,dx,dy]=opts[(Math.random()*opts.length)|0];
+    g[idx(2*a+1+dx,2*b+1+dy)]=OPEN; g[idx(2*na+1,2*nb+1)]=OPEN;
+    seen.add(ck(na,nb)); stack.push([na,nb]);
+  }
+}
+// build both layers + tunnel/quadrant metadata for a two-level level.
+// degree of a maze cell = how many of its four orthogonal neighbours are open
+// corridor. A cell with degree 1 is a dead end (a leaf of the maze tree).
+function cellDeg(g,a,b){
+  const cx=2*a+1, cy=2*b+1; let d=0;
+  if(g[idx(cx-1,cy)]===OPEN) d++;
+  if(g[idx(cx+1,cy)]===OPEN) d++;
+  if(g[idx(cx,cy-1)]===OPEN) d++;
+  if(g[idx(cx,cy+1)]===OPEN) d++;
+  return d;
+}
+// is (x,y) a tunnel mouth or one of its four orthogonal neighbours? Used to keep
+// hazards from punching a second opening beside a tunnel (which would turn a
+// dead-end tunnel into a pass-through and put it back "in the way").
+function nextToTunnel(x,y){
+  if(!twoLevel) return false;
+  for(const t of tunnels){
+    if((x===t.x && y===t.y) || (Math.abs(x-t.x)+Math.abs(y-t.y)===1)) return true;
+  }
+  return false;
+}
+function buildTwoLevel(cells, connect){
+  connect = connect|0;                      // 0 = all four quadrants sealed (easy)
+                                            // 1 = link two non-exit quadrants
+                                            // 2 = link all three non-exit quadrants
+  cols=rows=cells; W=2*cols+1; H=2*rows+1;
+  const mc=cols>>1, mr=rows>>1;             // quadrant split (cell coords)
+  const quadOfCell=(a,b)=> ((b>=mr)?2:0) + ((a>=mc)?1:0);
+
+  // exit quadrant + entry/exit border cells, decided up front so we can keep
+  // tunnels off them
+  const qx=1+((Math.random()*3)|0);         // 1, 2 or 3
+  const eb=Math.max(0,(mr-1)>>1);
+  const eCell={x:1, y:2*eb+1}, eNotch={x:0, y:2*eb+1};
+  let xCell, xNotch;
+  if(qx===1){ const b=Math.max(0,(mr-1)>>1);                 xCell={x:W-2,y:2*b+1}; xNotch={x:W-1,y:2*b+1}; }
+  else if(qx===3){ const b=Math.min(rows-1, mr+((rows-mr-1)>>1)); xCell={x:W-2,y:2*b+1}; xNotch={x:W-1,y:2*b+1}; }
+  else { const a=Math.max(0,(mc-1)>>1);                      xCell={x:2*a+1,y:H-2}; xNotch={x:2*a+1,y:H-1}; }
+
+  // ---- underground maze ----
+  // Put every tunnel on a DEAD-END leaf of the maze. In a tree a leaf can never
+  // be an interior node on the path between two other nodes, so the route to the
+  // correct tunnel never runs through a wrong one — the red herrings sit off on
+  // their own dead-end spurs, one per quadrant. Rebuild until each quadrant
+  // offers a leaf (perfect mazes have plenty, so this all but always passes once).
+  let under, tun=null;
+  for(let attempt=0; attempt<80 && !tun; attempt++){
+    under=new Uint8Array(W*H).fill(WALL);
+    carveInto(under, 0, cols-1, 0, rows-1);
+    const leaves=[[],[],[],[]];
+    for(let b=0;b<rows;b++) for(let a=0;a<cols;a++){
+      if(cellDeg(under,a,b)!==1) continue;
+      const tx=2*a+1, ty=2*b+1;
+      if(tx===eCell.x && ty===eCell.y) continue;      // never the entry cell
+      if(tx===xCell.x && ty===xCell.y) continue;      // never the exit cell
+      leaves[quadOfCell(a,b)].push({x:tx,y:ty});
+    }
+    if(leaves.every(L=>L.length)) tun=leaves.map(L=> L[(Math.random()*L.length)|0]);
+  }
+  if(!tun){ // ultra-rare fallback: central cells (degraded but always connected)
+    tun=[
+      {x:2*Math.max(0,(mc-1)>>1)+1,                 y:2*Math.max(0,(mr-1)>>1)+1},
+      {x:2*Math.min(cols-1, mc+((cols-mc-1)>>1))+1, y:2*Math.max(0,(mr-1)>>1)+1},
+      {x:2*Math.max(0,(mc-1)>>1)+1,                 y:2*Math.min(rows-1, mr+((rows-mr-1)>>1))+1},
+      {x:2*Math.min(cols-1, mc+((cols-mc-1)>>1))+1, y:2*Math.min(rows-1, mr+((rows-mr-1)>>1))+1}
+    ];
+  }
+  for(const t of tun) under[idx(t.x,t.y)]=OPEN;   // cell centres are already open
+
+  // SECOND PATH to the correct tunnel: the wrong tunnels stay dead-end leaves
+  // (so they're never in the way), but the exit-quadrant tunnel — the far one you
+  // actually need — gets a second corridor knocked through into a neighbouring
+  // cell, forming a loop. That guarantees an alternate approach, so a single
+  // sealed corridor (or your own drawn line) can't strand you from the exit.
+  (function(){
+    const c=tun[qx], cands=[];
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const wx=c.x+dx, wy=c.y+dy, nx=c.x+2*dx, ny=c.y+2*dy;
+      if(nx<1||ny<1||nx>W-2||ny>H-2) continue;
+      if(under[idx(wx,wy)]===OPEN) continue;                 // that's its existing corridor
+      if(under[idx(nx,ny)]!==OPEN) continue;                 // far side must already be corridor
+      if(tun.some(t=> t.x===nx && t.y===ny)) continue;       // never fuse two tunnels together
+      cands.push([wx,wy]);
+    }
+    if(cands.length){ const [wx,wy]=cands[(Math.random()*cands.length)|0]; under[idx(wx,wy)]=OPEN; }
+  })();
+
+  // ---- overground: four disconnected quadrant mazes ----
+  const over=new Uint8Array(W*H).fill(WALL);
+  carveInto(over, 0,   mc-1, 0,   mr-1);    // Q0 top-left  (entry quadrant)
+  carveInto(over, mc,  cols-1,0,  mr-1);    // Q1 top-right
+  carveInto(over, 0,   mc-1, mr,  rows-1);  // Q2 bottom-left
+  carveInto(over, mc,  cols-1,mr, rows-1);  // Q3 bottom-right
+  for(const t of tun) over[idx(t.x,t.y)]=OPEN;
+  over[idx(eCell.x,eCell.y)]=OPEN; over[idx(eNotch.x,eNotch.y)]=OPEN;
+  over[idx(xCell.x,xCell.y)]=OPEN; over[idx(xNotch.x,xNotch.y)]=OPEN;
+
+  // ---- HARD tiers: open walls BETWEEN non-exit quadrants (exit stays sealed) ----
+  // The four quadrants sit on a ring Q0-Q1-Q3-Q2-Q0. Dropping the exit quadrant
+  // leaves the other three on a path with two usable edges. We open one of them
+  // (preferring an edge off Q0, so you can walk out of the start) for connect=1,
+  // and both for connect=2 — joining all three. The exit quadrant is never on an
+  // opened edge, so it can still only be reached by tunnelling underground.
+  if(connect>0){
+    const openEdge=(edge)=>{
+      const opts=[];
+      if(edge==='E01')      for(let b=0;b<mr;b++)        opts.push([2*mc, 2*b+1]);     // Q0|Q1
+      else if(edge==='E32') for(let b=mr;b<rows;b++)     opts.push([2*mc, 2*b+1]);     // Q3|Q2
+      else if(edge==='E20') for(let a=0;a<mc;a++)        opts.push([2*a+1, 2*mr]);     // Q2|Q0
+      else if(edge==='E13') for(let a=mc;a<cols;a++)     opts.push([2*a+1, 2*mr]);     // Q1|Q3
+      if(opts.length){ const [x,y]=opts[(Math.random()*opts.length)|0]; over[idx(x,y)]=OPEN; }
+    };
+    const ringEdges=[{e:'E01',q:[0,1]},{e:'E13',q:[1,3]},{e:'E32',q:[3,2]},{e:'E20',q:[2,0]}];
+    const avail=ringEdges.filter(E=> E.q[0]!==qx && E.q[1]!==qx)         // never touch the exit quadrant
+                         .sort((a,b)=> (b.q.includes(0)?1:0)-(a.q.includes(0)?1:0)); // Q0-incident first
+    const n=Math.min(connect, avail.length);
+    for(let i=0;i<n;i++) openEdge(avail[i].e);
+  }
+
+  return { over, under, tunnels:tun, quadExit:qx, entry:eNotch, entryCell:eCell, exit:xNotch };
+}
+
+// reset every hazard for the layer we're now standing on (fresh roamers on this
+// layer's walls, no leftover fire/turf/balls), and restart the event timers.
+function resetHazardsForLayer(){
+  fires=[]; burningSet.clear(); stampFlash=null; sealFlashes=[];
+  grass=new Map(); balls=[]; ballFlash=0; ballRoute=[];
+  teleport=null; deadEnds=[]; teleFx=null; teleEnabled = level>=TELE_FROM;
+  hogs=[];     for(let i=0;i<diff.hogCount;i++)     hogs.push(spawnRoamer(diff.hogSpeed));
+  fsts=[];     for(let i=0;i<diff.fireCount;i++)    fsts.push(spawnRoamer(diff.fstSpeed));
+  patchers=[]; for(let i=0;i<diff.patcherCount;i++) patchers.push(spawnRoamer(diff.patcherSpeed));
+  timers.stamp=diff.stampEvery; timers.hog=diff.hogEvery; timers.fire=diff.fireEvery;
+  timers.patch=diff.patchEvery; timers.grass=diff.grassEvery; timers.ball=diff.ballEvery;
+  dark.active=false; blob.active=false;
+}
+
+// freeze the overground exactly as it stands, so it's waiting unchanged when you surface.
+function freezeOver(){
+  savedOver={
+    grid:grid.slice(), originalGrid:originalGrid?originalGrid.slice():null,
+    visited:visited.slice(), trail:trail.map(p=>({x:p.x,y:p.y,jump:p.jump})),
+    entry:{...entry}, exit:{...exit}, entryCell:{...entryCell}
+  };
+}
+function descend(){
+  freezeOver();
+  layer='under';
+  grid=underGrid.slice(); originalGrid=grid.slice(); oneway=new Map();
+  // underground goal = the CORRECT landing (the exit quadrant's tunnel)
+  const corr=tunnels[quadExit];
+  exit={x:corr.x, y:corr.y}; entry={x:player.tx, y:player.ty}; entryCell={x:player.tx, y:player.ty};
+  visited=new Uint8Array(W*H); visited[idx(player.tx,player.ty)]=1;
+  trail=[{x:player.tx, y:player.ty}];
+  player.t=0; player.dir='none'; player.want='none';
+  tunnelLock=true;
+  resetHazardsForLayer(); rebuildWalls(); recomputeSolution(); syncNextDir();
+}
+function ascend(){
+  layer='over';
+  grid=savedOver.grid; originalGrid=savedOver.originalGrid;
+  visited=savedOver.visited; trail=savedOver.trail;
+  entry=savedOver.entry; exit=savedOver.exit; entryCell=savedOver.entryCell;
+  oneway=new Map();
+  // surface at the same (x,y) — now in whichever quadrant that tunnel belongs to.
+  visited[idx(player.tx,player.ty)]=1;
+  pushTrailJump(player.tx,player.ty);       // pen-up: the line resumes in the new quadrant
+  player.t=0; player.dir='none'; player.want='none';
+  tunnelLock=true;
+  resetHazardsForLayer(); rebuildWalls(); recomputeSolution(); syncNextDir();
+}
+
+// did the player just land on a tunnel/landing tile? -> begin a layer transition.
+function tunnelCheck(){
+  if(!twoLevel || tunnelLock || transit) return;
+  for(const t of tunnels){
+    if(player.tx===t.x && player.ty===t.y){
+      transit={ dir: layer==='over'?'down':'up', t:0, dur:1.3, swapped:false,
+                label: layer==='over'?'DESCENDING':'SURFACING' };
+      return;
+    }
+  }
+}
+// advance the descent/ascent fade; swap layers at the midpoint (full black).
+function stepTransit(dt){
+  transit.t+=dt;
+  if(!transit.swapped && transit.t>=transit.dur/2){
+    transit.swapped=true;
+    if(transit.dir==='down') descend(); else ascend();
+  }
+  if(transit.t>=transit.dur){ transit=null; }
+}
+
+/* ============================================================
+   STAMP DROPS — rewrite a 3/4/5 cell patch of the maze
+   ============================================================ */
+const STAMP_SIZES=[3,4,5];
+function dropStamp(){
+  const s=STAMP_SIZES[(Math.random()*STAMP_SIZES.length)|0];
+  const headT=headTile();
+  let ox=-1, oy=-1;
+  for(let tries=0; tries<60; tries++){
+    const x=1+((Math.random()*(W-2-s))|0);
+    const y=1+((Math.random()*(H-2-s))|0);
+    // don't overwrite entry/exit openings or the player / next tile
+    let bad=false;
+    for(let j=0;j<s && !bad;j++) for(let i=0;i<s;i++){
+      const tx=x+i, ty=y+j;
+      if((tx===entry.x&&ty===entry.y)||(tx===exit.x&&ty===exit.y)) {bad=true;break;}
+      if((tx===player.tx&&ty===player.ty)||(tx===headT[0]&&ty===headT[1])) {bad=true;break;}
+      if(nextToTunnel(tx,ty)) {bad=true;break;}     // keep tunnels as dead ends
+    }
+    if(!bad){
+      // for shaped mazes, make sure the patch actually lands on the maze body
+      if(grid[idx(x+(s>>1), y+(s>>1))]===VOID) bad=true;
+    }
+    if(!bad){ ox=x; oy=y; break; }
+  }
+  if(ox<0) return;
+  const harder = Math.random()<diff.harder;
+  applyStamp(ox,oy,s,harder);
+  rebuildWalls(); recomputeSolution();
+  stampFlash={x:ox,y:oy,s,t:0.85,harder};
+}
+function applyStamp(ox,oy,s,harder){
+  const sset=(x,y,v)=>{ if(grid[idx(x,y)]!==VOID) grid[idx(x,y)]=v; };  // leave the void alone
+  if(harder){
+    // mostly walls -> removes exits (a trap). Sometimes leave one passage.
+    for(let j=0;j<s;j++) for(let i=0;i<s;i++){ sset(ox+i,oy+j,WALL); clearDoor(ox+i,oy+j); }
+    if(Math.random()<0.6){
+      if(Math.random()<0.5){ const r=(s>>1); for(let i=0;i<s;i++) sset(ox+i,oy+r,OPEN); }
+      else                 { const cc=(s>>1); for(let j=0;j<s;j++) sset(ox+cc,oy+j,OPEN); }
+    }
+  } else {
+    // open patch -> adds exits / loops. Carve mostly open with a few pillars.
+    for(let j=0;j<s;j++) for(let i=0;i<s;i++){
+      clearDoor(ox+i,oy+j);
+      sset(ox+i,oy+j, (Math.random()<0.22 && i>0 && j>0 && i<s-1 && j<s-1) ? WALL : OPEN);
+    }
+  }
+}
+
+/* ============================================================
+   GRASS + BALLS — the shake-driven layer.
+   • Grass sprouts on corridor tiles and thickens over time; once a tile
+     is fully overgrown it blocks passage. A shake slashes every tile by 20%.
+   • Balls sit in corridors; rolling over one collects it. A shake then
+     fires it toward the exit, lighting the route red for 3s and (if you're
+     boxed in) smashing through any walls that were created to reopen a path.
+   ============================================================ */
+
+// pick a fair, open corridor tile away from the player / portals / drawn line
+function eligibleTile(extra){
+  const headT=headTile();
+  for(let tries=0;tries<80;tries++){
+    const x=1+((Math.random()*(W-2))|0), y=1+((Math.random()*(H-2))|0);
+    if(!isOpen(x,y) || burning(x,y)) continue;
+    if((x===entry.x&&y===entry.y)||(x===exit.x&&y===exit.y)) continue;
+    if(x===entryCell.x&&y===entryCell.y) continue;
+    if(visited && visited[idx(x,y)]) continue;                                   // never on the drawn line
+    if(Math.max(Math.abs(x-player.tx),Math.abs(y-player.ty))<2) continue;        // small standoff
+    if(headT[0]===x && headT[1]===y) continue;
+    if(extra && !extra(x,y)) continue;
+    return [x,y];
+  }
+  return null;
+}
+
+function sproutGrass(){
+  if(grass.size > Math.floor(cols*1.5)) return;        // keep the field manageable
+  for(let i=0;i<diff.grassSprout;i++){
+    const t=eligibleTile((x,y)=> !grass.has(key(x,y)));
+    if(t) grass.set(key(t[0],t[1]), 0.18+Math.random()*0.12);  // start as young turf
+  }
+}
+
+function spawnBall(){
+  if(balls.length>=2) return;
+  const t=eligibleTile((x,y)=> grassAt(x,y)<GRASS_BLOCK && !balls.some(b=>b.x===x&&b.y===y));
+  if(t) balls.push({x:t[0], y:t[1], phase:Math.random()*6.28});
+}
+
+function collectBallAt(x,y){
+  for(let i=balls.length-1;i>=0;i--){
+    if(balls[i].x===x && balls[i].y===y){ balls.splice(i,1); ballCount++; syncShakeBox(); }
+  }
+}
+
+function mowGrass(){
+  if(!grass.size) return false;
+  let changed=false;
+  for(const [k,v] of grass){
+    const nv=v-MOW_AMOUNT;
+    if(nv<=0.001){ grass.delete(k); if(v>=GRASS_BLOCK) changed=true; }
+    else { grass.set(k,nv); if(v>=GRASS_BLOCK && nv<GRASS_BLOCK) changed=true; }
+  }
+  if(changed) recomputeSolution();
+  return true;
+}
+
+// BFS over the ORIGINAL maze openness from the player to the exit, then
+// reopen any tiles along it that have since been walled off, clearing grass too.
+function bashOriginalPath(){
+  if(!originalGrid) return;
+  const par=new Int32Array(W*H).fill(-2);
+  const si=idx(player.tx,player.ty), gi=idx(exit.x,exit.y);
+  const oOpen=(x,y)=> inB(x,y) && originalGrid[idx(x,y)]===OPEN;
+  par[si]=-1; const q=[si]; let h=0;
+  while(h<q.length){
+    const c=q[h++]; if(c===gi) break;
+    const x=c%W, y=(c/W)|0;
+    for(const d of ['up','down','left','right']){ const v=DIRV[d], nx=x+v[0], ny=y+v[1];
+      if(!oOpen(nx,ny)) continue; const ni=idx(nx,ny); if(par[ni]!==-2) continue; par[ni]=c; q.push(ni); }
+  }
+  if(par[gi]===-2) return;
+  let cur=gi, changed=false;
+  while(cur!==-1){
+    const x=cur%W, y=(cur/W)|0, k=key(x,y);
+    if(grid[idx(x,y)]===WALL){ grid[idx(x,y)]=OPEN; changed=true; }   // smash a created wall
+    if(grass.has(k)) grass.delete(k);                                // and any turf in the way
+    cur=par[cur];
+  }
+  if(changed) rebuildWalls();
+  recomputeSolution();
+}
+
+// A distance field from the exit that IGNORES the drawn line and the one-way
+// gates, so the fired ball can always point to the exit — even when that means
+// the route runs back BEHIND the player, out of a dead end you walked into.
+// (The regular hint obeys "you can't route over your own line"; the ball doesn't.)
+function ballGuideRoute(){
+  const bd=new Int32Array(W*H).fill(-1);
+  const q=[];
+  for(const g of solutionGoals()){ const gi=idx(g.x,g.y); if(bd[gi]!==0){ bd[gi]=0; q.push(gi); } }
+  let h=0;
+  while(h<q.length){
+    const cur=q[h++], x=cur%W, y=(cur/W)|0, d=bd[cur];
+    for(const dd of ['up','down','left','right']){
+      const v=DIRV[dd], nx=x+v[0], ny=y+v[1];
+      if(!inB(nx,ny)) continue;
+      const ni=idx(nx,ny);
+      if(bd[ni]!==-1) continue;
+      if(!passable(nx,ny)) continue;       // walls / fire / overgrown turf still block
+      bd[ni]=d+1; q.push(ni);
+    }
+  }
+  let x=player.tx, y=player.ty;
+  if(bd[idx(x,y)]<0) return [];
+  const route=[[x,y]]; let guard=0;
+  while(bd[idx(x,y)]>0 && guard++<W*H){
+    let best=null, bdv=bd[idx(x,y)];
+    for(const dd of ['up','down','left','right']){
+      const v=DIRV[dd], nx=x+v[0], ny=y+v[1];
+      if(!inB(nx,ny) || !passable(nx,ny)) continue;
+      const nd=bd[idx(nx,ny)];
+      if(nd>=0 && nd<bdv){ bdv=nd; best=[nx,ny]; }
+    }
+    if(!best) break; x=best[0]; y=best[1]; route.push([x,y]);
+  }
+  return route;
+}
+
+function fireBall(){
+  if(ballCount<=0) return;
+  ballCount--;
+  recomputeSolution();
+  if(!solvable) bashOriginalPath();   // boxed in -> reopen a path to the end
+  // always aim at the exit — the ball will happily double back past the player
+  // and out of a dead end if that's where the way forward really lies.
+  ballRoute=ballGuideRoute();
+  if(ballRoute.length<2) ballRoute=hintRoute();   // fallback to the gate-aware hint
+  ballFlash=BALL_FLASH;
+  syncShakeBox();
+}
+
+// is there fire on the player's tile or right next to it?
+function fireAdjacent(){
+  if(!fires.length) return false;
+  for(const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]])
+    if(burning(player.tx+dx, player.ty+dy)) return true;
+  return false;
+}
+// snuff out any fire on / beside the player — the slash beats out the flames
+function snuffFire(){
+  if(!fires.length) return false;
+  const kill=new Set();
+  for(const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]) kill.add(key(player.tx+dx, player.ty+dy));
+  let changed=false;
+  fires=fires.filter(f=>{
+    if(kill.has(key(f.x,f.y))){ burningSet.delete(key(f.x,f.y)); changed=true; return false; }
+    return true;
+  });
+  if(changed) recomputeSolution();
+  return changed;
+}
+// the SLASH: beat back nearby fire AND trim grass, on a shared 15s cooldown
+function slashAction(){
+  if(mowCool>0) return false;
+  const f=snuffFire(), g=mowGrass();
+  if(f||g){ mowCool=SHAKE_COOLDOWN; return true; }
+  return false;
+}
+
+// the single shake action: clear fire that's blocking you first (rather than wait
+// it out), else fire a held ball, else slash grass.
+function doShakeAction(){
+  if(gameWon||gameOver||countdown>0||transit||overlayOpen()||paused) return;
+  if(fireAdjacent() && mowCool<=0){ slashAction(); syncShakeBox(); return; }
+  if(ballCount>0){ fireBall(); }
+  else { slashAction(); }
+  syncShakeBox();
+}
+
+function syncShakeBox(){
+  // dedicated FIRE button (desktop-friendly ball control)
+  const fb=document.getElementById('btnFire');
+  if(fb){
+    const has=ballCount>0;
+    fb.disabled=!has;
+    document.getElementById('fbTop').innerHTML='● FIRE'+(ballCount>1?(' ×'+ballCount):'');
+    document.getElementById('fbSub').textContent = has ? 'shake / F' : 'need a ball';
+    fb.classList.toggle('ball', has);
+  }
+  if(!shakeBox) return;
+  shakeBox.classList.remove('ball','ready','cool','enable');
+  if(Motion.available() && !Motion.enabled && Motion.needsPermission()){
+    shakeBox.classList.add('enable');
+    sbTop.textContent='ENABLE'; sbSub.textContent='tap for shake';
+  } else if(ballCount>0){
+    shakeBox.classList.add('ball');
+    sbTop.innerHTML='● BALL'+(ballCount>1?(' ×'+ballCount):'');
+    sbSub.textContent='shake to fire';
+  } else if(mowCool>0){
+    shakeBox.classList.add('cool');
+    sbTop.textContent='SLASH'; sbSub.textContent=Math.ceil(mowCool)+'s';
+  } else {
+    shakeBox.classList.add('ready');
+    sbTop.textContent='SLASH'; sbSub.textContent='shake';
+  }
+}
+
+/* ============================================================
+   PLAYER MOVEMENT
+   decisions only happen at tile centres (t===0); the line
+   "remembers" the last queued direction and turns when it can.
+   ============================================================ */
+function headTile(){ const v=DIRV[player.dir]; return [player.tx+v[0], player.ty+v[1]]; }
+
+function decide(){
+  // at the centre of (tx,ty): pick a direction to leave by
+  if(player.want!=='none' && passNbr(player.tx,player.ty,player.want)){
+    player.dir=player.want; player.want='none'; return;
+  }
+  if(player.dir!=='none' && passNbr(player.tx,player.ty,player.dir)) return;
+  player.dir='none';
+}
+
+function setWant(d){
+  if(gameWon||gameOver) return;
+  // Reversing is allowed to be queued, but the line will physically step back
+  // onto a tile it already drew — which ends the level. No free teleport-reverse.
+  player.want=d;
+  syncNextDir();
+}
+
+function pushTrail(x,y){
+  const last=trail[trail.length-1];
+  if(!last || last.x!==x || last.y!==y) trail.push({x,y});
+}
+// a trail point that lifts the pen first — used by teleport so the drawn line
+// resumes at the destination instead of streaking straight across the maze.
+function pushTrailJump(x,y){ trail.push({x,y,jump:true}); }
+
+function stepPlayer(dt){
+  if(gameWon || gameOver || stopped) return;
+  if(player.dir==='none' && player.want==='none'){
+    if(player.t===0) decide();
+    if(player.dir==='none') return;
+  }
+  let remaining = (SPEED_PX/tile)*dt;             // tiles to travel this frame
+  let guard=0;
+  while(remaining>0 && guard++<4000){
+    if(player.t===0){ decide(); if(player.dir==='none') break; }
+    const step=Math.min(1-player.t, remaining);
+    player.t+=step; remaining-=step;
+    if(player.t>=1-1e-9){
+      const v=DIRV[player.dir];
+      player.tx+=v[0]; player.ty+=v[1]; player.t=0;
+      if((!twoLevel || layer==='over') && player.tx===exit.x && player.ty===exit.y){ pushTrail(player.tx,player.ty); win(); break; }
+      const pi=idx(player.tx,player.ty);
+      if(visited[pi]){ pushTrail(player.tx,player.ty); crash(); break; }   // crossed our own line -> lose
+      visited[pi]=1;
+      collectBallAt(player.tx,player.ty);
+      pushTrail(player.tx,player.ty);
+      recomputeSolution();
+      teleportCheck();   // landed on a teleport pad? -> whisk to the route
+      // two-level tunnels: clear the lock once you step off, else trigger a descent/ascent
+      if(twoLevel){
+        const onTunnel=tunnels.some(t=> t.x===player.tx && t.y===player.ty);
+        if(!onTunnel) tunnelLock=false;
+        else { tunnelCheck(); if(transit){ player.t=0; break; } }
+      }
+    }
+  }
+}
+
+/* ============================================================
+   TIMED EVENTS
+   ============================================================ */
+function tickEvents(dt){
+  timers.stamp-=dt; timers.hog-=dt; timers.fire-=dt; timers.patch-=dt; timers.dark-=dt;
+  timers.grass-=dt; timers.ball-=dt;
+  if(timers.stamp<=0){ dropStamp();     timers.stamp+=diff.stampEvery; }
+  if(timers.hog  <=0){ ploughAll();     timers.hog  +=diff.hogEvery;  }
+  if(timers.fire <=0){ igniteFires();   timers.fire +=diff.fireEvery; }
+  if(timers.patch<=0){ sealAll();       timers.patch+=diff.patchEvery; }
+  if(timers.dark <=0 && !dark.active && !blob.active){ spawnBlob(); timers.dark+=darkCur.interval; }
+  if(timers.grass<=0){ sproutGrass();   timers.grass+=diff.grassEvery; }
+  if(timers.ball <=0){ spawnBall();     timers.ball +=diff.ballEvery; }
+
+  // teleport pad: spawn / re-hop when the dwell runs out or the tile gets walled
+  if(teleEnabled){
+    if(!teleport || !isOpen(teleport.x,teleport.y)){ hopTeleport(); }
+    else { teleport.ttl-=dt; if(teleport.ttl<=0) hopTeleport(); }
+  }
+  if(teleFx){ teleFx.t-=dt; if(teleFx.t<=0) teleFx=null; }
+
+  // grow the turf; recompute routing when a tile newly seals or unseals
+  if(grass.size){
+    let changed=false;
+    for(const [k,v] of grass){
+      const nv=Math.min(GRASS_BLOCK, v+diff.grassGrow*dt);
+      grass.set(k,nv);
+      if(v<GRASS_BLOCK && nv>=GRASS_BLOCK) changed=true;
+    }
+    if(changed) recomputeSolution();
+  }
+
+  // shake cooldown + fired-ball route lifetime
+  if(mowCool>0)   mowCool  =Math.max(0,mowCool-dt);
+  if(ballFlash>0) ballFlash=Math.max(0,ballFlash-dt);
+
+  // blackout lifetime
+  if(dark.flash>0) dark.flash=Math.max(0,dark.flash-dt);
+  if(dark.active){ dark.ttl-=dt; if(dark.ttl<=0){ dark.active=false; } }
+  updateBlob(dt);
+
+  // age fires
+  if(fires.length){
+    let changed=false;
+    for(const f of fires){ f.ttl-=dt; }
+    fires=fires.filter(f=>{
+      if(f.ttl>0) return true;
+      burningSet.delete(key(f.x,f.y)); changed=true; return false;
+    });
+    if(changed) recomputeSolution();
+  }
+}
+function triggerDark(){
+  dark.active=true; dark.ttl=darkCur.dur; dark.clearCells=darkCur.clearCells; dark.flash=0.4;
+}
+// the torch blob spawns on the far side of the board and homes straight at you
+function spawnBlob(){
+  const pw=playerWorld();
+  const c={x:W*tile/2, y:H*tile/2};
+  let dx=pw.x-c.x, dy=pw.y-c.y, L=Math.hypot(dx,dy);
+  let ux, uy;
+  if(L<tile){ const a=Math.random()*6.2832; ux=Math.cos(a); uy=Math.sin(a); }  // player ~centre: random side
+  else { ux=-dx/L; uy=-dy/L; }                                                  // opposite side from player
+  const reach=Math.max(W,H)*tile;
+  let sx=clamp(c.x+ux*reach, tile*0.5, W*tile-tile*0.5);
+  let sy=clamp(c.y+uy*reach, tile*0.5, H*tile-tile*0.5);
+  blob.active=true; blob.x=sx; blob.y=sy; blob.phase=Math.random()*6.2832;
+  blob.speed=(Math.max(W,H)*tile)/3.0;     // crosses the board in ~3s -> a few-second warning
+}
+function updateBlob(dt){
+  if(!blob.active) return;
+  blob.phase += dt;
+  const pw=playerWorld();
+  let dx=pw.x-blob.x, dy=pw.y-blob.y, d=Math.hypot(dx,dy)||1;
+  if(d < tile*0.9){ blob.active=false; triggerDark(); return; }   // collision -> vision collapses
+  const step=Math.min(d, blob.speed*dt);
+  blob.x += dx/d*step; blob.y += dy/d*step;
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+let now0=performance.now(), animClock=0;
+function render(){
+  animClock=performance.now()/1000;
+
+  // ---- viewport (device space): clear + floor ----
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,viewCss,viewCss);
+  ctx.fillStyle=C.floor; ctx.fillRect(0,0,viewCss,viewCss);
+
+  // ---- world space (camera scale + pan) ----
+  applyCamTransform();
+
+  // walls
+  ctx.fillStyle=C.wall; if(wallPath) ctx.fill(wallPath);
+
+  // entrance / exit glows  (underground hides them so the goal tunnel stays a secret)
+  if(twoLevel){
+    if(layer==='over'){ drawPortal(entry.x,entry.y,C.green); drawPortal(exit.x,exit.y,C.gold); }
+    drawTunnels();
+  } else {
+    drawPortal(entry.x,entry.y,C.green);
+    drawPortal(exit.x, exit.y, C.gold);
+  }
+
+  // one-way gates
+  if(oneway.size) for(const [k,d] of oneway){ const c=k.split(','); drawDoor(+c[0],+c[1],d); }
+
+  // turf
+  drawGrass();
+
+  // route: flashed at level start, or held on by the Hint toggle
+  if(flashTimer>0 || hintOn){
+    const r=hintRoute();
+    if(r.length>1){
+      const flashing=flashTimer>0;
+      ctx.lineWidth=Math.max(2,tile*0.5); ctx.lineCap='round'; ctx.lineJoin='round';
+      ctx.strokeStyle = flashing ? C.hintFlash : C.hint;
+      if(flashing){ ctx.shadowColor=C.hintFlash; ctx.shadowBlur=tile*0.7; }
+      ctx.beginPath();
+      ctx.moveTo(cx(r[0][0]),cy(r[0][1]));
+      for(let i=1;i<r.length;i++) ctx.lineTo(cx(r[i][0]),cy(r[i][1]));
+      ctx.stroke(); ctx.shadowBlur=0;
+    }
+  }
+
+  // fired-ball route (red), fires + patcher seal flashes, then loose balls
+  drawBallRoute();
+  for(const f of fires) drawFire(f);
+  drawSealFlashes();
+  drawTeleport();
+  drawBalls();
+
+  // the drawn line (trail) + live head segment
+  if(trail.length){
+    ctx.lineWidth=Math.max(2,tile*0.5); ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.strokeStyle=C.trail;
+    ctx.shadowColor=C.trail; ctx.shadowBlur=Math.max(4,tile*0.8);
+    ctx.beginPath();
+    ctx.moveTo(cx(trail[0].x),cy(trail[0].y));
+    for(let i=1;i<trail.length;i++){
+      const p=trail[i];
+      if(p.jump) ctx.moveTo(cx(p.x),cy(p.y));   // teleport: lift the pen, resume here
+      else       ctx.lineTo(cx(p.x),cy(p.y));
+    }
+    const hp=headPx(); ctx.lineTo(hp.x,hp.y); ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+  // head dot
+  const hp=headPx();
+  ctx.beginPath(); ctx.fillStyle=stopped?'#ff4d6d':C.head;
+  ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=Math.max(5,tile);
+  ctx.arc(hp.x,hp.y,Math.max(2.4,tile*0.42),0,6.2832); ctx.fill();
+  ctx.shadowBlur=0;
+
+  // entities
+  for(const h of hogs) drawHog(h);
+  for(const f of fsts) drawFst(f);
+  for(const p of patchers) drawPatcher(p);
+  drawBlob();                           // torch blob homing in (precedes a blackout)
+  drawTeleFx();                         // ripple where a teleport just fired
+
+  // stamp flash
+  if(stampFlash){
+    const a=Math.max(0,stampFlash.t/0.85);
+    ctx.strokeStyle = stampFlash.harder ? `rgba(255,77,109,${a})` : `rgba(182,255,58,${a})`;
+    ctx.lineWidth=2;
+    ctx.strokeRect(stampFlash.x*tile+1, stampFlash.y*tile+1, stampFlash.s*tile-2, stampFlash.s*tile-2);
+    ctx.fillStyle = stampFlash.harder ? `rgba(255,77,109,${a*0.12})` : `rgba(182,255,58,${a*0.12})`;
+    ctx.fillRect(stampFlash.x*tile, stampFlash.y*tile, stampFlash.s*tile, stampFlash.s*tile);
+  }
+
+  // ---- back to screen space: blackout, touch-zones, countdown ----
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  drawDarkness();
+  drawZones();
+  drawCountdown();
+  drawTransit();
+}
+
+/* ---------- camera: focus a world point at a scale, eased each frame ---------- */
+function playerWorld(){
+  return { x:cx(player.tx)+DIRV[player.dir][0]*tile*player.t,
+           y:cy(player.ty)+DIRV[player.dir][1]*tile*player.t };
+}
+function visTiles(){ return 2*Math.max(6, cols - zoomLevel(level)) + 1; }
+function updateCamera(dt){
+  const overview = countdown>0;                      // show the whole maze during the count-in
+  const playScale = viewCss/(visTiles()*tile);
+  const ovScale   = viewCss/(W*tile);
+  const tScale = overview ? ovScale : playScale;
+  let fx, fy;
+  if(overview){ fx=W*tile/2; fy=H*tile/2; }
+  else {
+    const half=(visTiles()*tile)/2, pw=playerWorld();
+    fx = (W*tile<=visTiles()*tile) ? W*tile/2 : clamp(pw.x, half, W*tile-half);
+    fy = (H*tile<=visTiles()*tile) ? H*tile/2 : clamp(pw.y, half, H*tile-half);
+  }
+  const k = camSnap ? 1 : Math.min(1, dt*9);
+  cam.scale += (tScale-cam.scale)*k;
+  cam.cx    += (fx-cam.cx)*k;
+  cam.cy    += (fy-cam.cy)*k;
+  camSnap=false;
+}
+function applyCamTransform(){
+  const s=cam.scale*dpr;
+  const tx=(viewCss/2 - cam.cx*cam.scale)*dpr;
+  const ty=(viewCss/2 - cam.cy*cam.scale)*dpr;
+  ctx.setTransform(s,0,0,s,tx,ty);
+}
+function worldToScreen(wx,wy){ return { x:(wx-cam.cx)*cam.scale + viewCss/2, y:(wy-cam.cy)*cam.scale + viewCss/2 }; }
+
+function headPx(){
+  const v=DIRV[player.dir];
+  return { x:cx(player.tx)+v[0]*tile*player.t, y:cy(player.ty)+v[1]*tile*player.t };
+}
+function drawPortal(x,y,col){
+  ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=tile*1.2;
+  ctx.fillRect(x*tile+tile*0.18, y*tile+tile*0.18, tile*0.64, tile*0.64);
+  ctx.shadowBlur=0;
+}
+function drawFire(f){
+  const px=cx(f.x), py=cy(f.y), r=tile*0.5;
+  ctx.fillStyle=C.fireBlock; ctx.fillRect(f.x*tile,f.y*tile,tile,tile);
+  const fl=0.75+0.25*Math.sin(animClock*9+f.phase);
+  const g=ctx.createRadialGradient(px,py+r*0.2,1, px,py,r*1.3);
+  g.addColorStop(0,C.fireA); g.addColorStop(0.5,C.fireB); g.addColorStop(1,'rgba(255,90,31,0)');
+  ctx.fillStyle=g; ctx.shadowColor=C.fireB; ctx.shadowBlur=tile;
+  ctx.beginPath(); ctx.arc(px,py,r*fl,0,6.2832); ctx.fill();
+  ctx.shadowBlur=0;
+}
+function drawGrass(){
+  if(!grass.size) return;
+  ctx.lineCap='round';
+  for(const [k,v] of grass){
+    const c=k.split(','), x=+c[0], y=+c[1];
+    const px=x*tile, py=y*tile;
+    const g=Math.min(1, v/GRASS_BLOCK);
+    const blocked = v>=GRASS_BLOCK;
+    // soil tint deepens with growth
+    ctx.fillStyle=`rgba(57,255,155,${0.05+0.20*g})`;
+    ctx.fillRect(px,py,tile,tile);
+    // blades rise as the turf thickens
+    const blades=3+Math.round(7*g);
+    const maxH=tile*(0.22+0.72*g);
+    ctx.strokeStyle = blocked ? '#39ff9b' : 'rgba(95,225,150,0.9)';
+    ctx.lineWidth=Math.max(1,tile*0.07);
+    ctx.beginPath();
+    for(let i=0;i<blades;i++){
+      const bx=px + tile*((i+0.5)/blades);
+      const sway=Math.sin(animClock*2 + i*1.7 + x*0.3 + y*0.5)*tile*0.06*g;
+      const h=maxH*(0.6+0.4*Math.sin(i*2.1+x));
+      ctx.moveTo(bx, py+tile);
+      ctx.lineTo(bx+sway, py+tile-h);
+    }
+    if(blocked){ ctx.shadowColor='#39ff9b'; ctx.shadowBlur=tile*0.5; }
+    ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+}
+function drawBalls(){
+  for(const b of balls){
+    const px=cx(b.x), py=cy(b.y), r=tile*0.3;
+    const pulse=0.85+0.15*Math.sin(animClock*5+b.phase);
+    ctx.fillStyle='#ff4d6d'; ctx.shadowColor='#ff4d6d'; ctx.shadowBlur=tile*0.9*pulse;
+    ctx.beginPath(); ctx.arc(px,py,r*pulse,0,6.2832); ctx.fill(); ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,222,228,0.9)';
+    ctx.beginPath(); ctx.arc(px-r*0.3,py-r*0.3,r*0.28,0,6.2832); ctx.fill();
+  }
+}
+function drawBallRoute(){
+  if(ballFlash<=0 || ballRoute.length<2) return;
+  const a=Math.min(1, ballFlash/BALL_FLASH);
+  ctx.lineWidth=Math.max(2,tile*0.5); ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.strokeStyle=`rgba(255,77,109,${0.85*a})`;
+  ctx.shadowColor='rgba(255,77,109,0.8)'; ctx.shadowBlur=tile*0.7;
+  ctx.beginPath();
+  ctx.moveTo(cx(ballRoute[0][0]),cy(ballRoute[0][1]));
+  for(let i=1;i<ballRoute.length;i++) ctx.lineTo(cx(ballRoute[i][0]),cy(ballRoute[i][1]));
+  ctx.stroke(); ctx.shadowBlur=0;
+  // a red ball racing the lit lane toward the exit
+  const prog=Math.min(1, (BALL_FLASH-ballFlash)/(BALL_FLASH*0.7));
+  const seg=prog*(ballRoute.length-1);
+  const i=Math.min(ballRoute.length-2, Math.floor(seg)), f=seg-i;
+  const bx=cx(ballRoute[i][0])+(cx(ballRoute[i+1][0])-cx(ballRoute[i][0]))*f;
+  const by=cy(ballRoute[i][1])+(cy(ballRoute[i+1][1])-cy(ballRoute[i][1]))*f;
+  ctx.fillStyle='#ff4d6d'; ctx.shadowColor='#ff4d6d'; ctx.shadowBlur=tile;
+  ctx.beginPath(); ctx.arc(bx,by,Math.max(3,tile*0.34),0,6.2832); ctx.fill(); ctx.shadowBlur=0;
+}
+function drawTeleport(){
+  if(!teleport) return;
+  const t=teleport, px=cx(t.x), py=cy(t.y), r=tile*0.42;
+  const pulse=0.55+0.45*Math.sin(animClock*5+t.phase);
+  const frac=Math.max(0,Math.min(1,t.ttl/TELE_PERIOD));   // dwell remaining
+  ctx.save();
+  // glow disc (cyan->lime, the brand palette)
+  const g=ctx.createRadialGradient(px,py,0,px,py,r*1.7);
+  g.addColorStop(0, 'rgba(52,225,255,'+(0.55*pulse)+')');
+  g.addColorStop(0.6,'rgba(182,255,58,'+(0.22*pulse)+')');
+  g.addColorStop(1, 'rgba(52,225,255,0)');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r*1.7,0,6.2832); ctx.fill();
+  // twin swirling rings
+  ctx.shadowColor='#34e1ff'; ctx.shadowBlur=tile*0.6;
+  ctx.strokeStyle='rgba(52,225,255,'+(0.9*pulse)+')'; ctx.lineWidth=Math.max(1.5,tile*0.1);
+  ctx.beginPath(); ctx.arc(px,py,r*0.85, animClock*2, animClock*2+5.0); ctx.stroke();
+  ctx.strokeStyle='rgba(182,255,58,'+(0.75*pulse)+')';
+  ctx.beginPath(); ctx.arc(px,py,r*0.5, -animClock*2.6, -animClock*2.6+5.0); ctx.stroke();
+  ctx.shadowBlur=0;
+  // shrinking dwell-countdown arc on the outside
+  ctx.strokeStyle='rgba(215,236,247,0.85)'; ctx.lineWidth=Math.max(2,tile*0.13);
+  ctx.beginPath(); ctx.arc(px,py,r*1.3, -Math.PI/2, -Math.PI/2+frac*6.2832); ctx.stroke();
+  ctx.restore();
+}
+function drawTeleFx(){
+  if(!teleFx) return;
+  const a=teleFx.t/0.6;
+  for(const [x,y] of [[teleFx.x,teleFx.y],[teleFx.dx,teleFx.dy]]){
+    const px=cx(x), py=cy(y), r=tile*(0.4+(1-a)*0.9);
+    ctx.strokeStyle='rgba(52,225,255,'+(a*0.9)+')'; ctx.lineWidth=Math.max(1.5,tile*0.12);
+    ctx.shadowColor='#34e1ff'; ctx.shadowBlur=tile*0.5;
+    ctx.beginPath(); ctx.arc(px,py,r,0,6.2832); ctx.stroke(); ctx.shadowBlur=0;
+  }
+}
+// the four tunnel mouths (same coords on both layers). Down-chevron on the
+// surface, up-chevron underground. During the opening count-in the CORRECT
+// surface tunnel crackles electric-yellow three times — the only standing clue
+// to which landing leads to the exit quadrant.
+function drawTunnels(){
+  if(!twoLevel) return;
+  const down = layer==='over';
+  for(let ti=0; ti<tunnels.length; ti++){
+    const t=tunnels[ti];
+    const px=cx(t.x), py=cy(t.y), r=tile*0.46;
+    const pulse=0.6+0.4*Math.sin(animClock*3 + t.x*0.7 + t.y*0.3);
+    ctx.save();
+    // dark pit + coloured rim glow
+    const g=ctx.createRadialGradient(px,py,0,px,py,r*1.5);
+    g.addColorStop(0,'rgba(3,6,10,0.95)');
+    g.addColorStop(0.7, down ? 'rgba(52,225,255,'+(0.30*pulse)+')' : 'rgba(255,170,80,'+(0.30*pulse)+')');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r*1.5,0,6.2832); ctx.fill();
+    // rim
+    ctx.lineWidth=Math.max(1.5,tile*0.1);
+    ctx.strokeStyle = down ? 'rgba(52,225,255,'+(0.9*pulse)+')' : 'rgba(255,180,90,'+(0.9*pulse)+')';
+    ctx.shadowColor = down ? '#34e1ff' : '#ffaa50'; ctx.shadowBlur=tile*0.5;
+    ctx.beginPath(); ctx.arc(px,py,r*0.78,0,6.2832); ctx.stroke();
+    ctx.shadowBlur=0;
+    // chevron pointing down (descend) or up (ascend)
+    ctx.strokeStyle = down ? 'rgba(182,255,58,0.95)' : 'rgba(255,230,170,0.95)';
+    ctx.lineWidth=Math.max(1.5,tile*0.12); ctx.lineCap='round'; ctx.lineJoin='round';
+    const s=r*0.42, dir=down?1:-1;
+    for(const off of [-s*0.5, s*0.35]){
+      ctx.beginPath();
+      ctx.moveTo(px-s, py+off-dir*s*0.4);
+      ctx.lineTo(px,   py+off+dir*s*0.4);
+      ctx.lineTo(px+s, py+off-dir*s*0.4);
+      ctx.stroke();
+    }
+    // CLUE: the correct surface tunnel zaps electric-yellow 3x during the count-in
+    if(down && countdown>0 && ti===quadExit){
+      const t01=1-countdown;                          // 0..1 over the ~1s count-in
+      const zap=Math.abs(Math.sin(t01*Math.PI*3));    // three crackles
+      if(zap>0.05){
+        const a=Math.min(1, zap*(0.65+0.35*Math.sin(animClock*55)));
+        ctx.strokeStyle=`rgba(255,242,120,${a})`;
+        ctx.shadowColor='#fff36e'; ctx.shadowBlur=tile*0.9*zap;
+        ctx.lineWidth=Math.max(1.2,tile*0.09);
+        const bolts=6;
+        for(let i=0;i<bolts;i++){
+          const base=(i/bolts)*6.2832 + animClock*2;
+          ctx.beginPath();
+          ctx.moveTo(px+Math.cos(base)*r*0.25, py+Math.sin(base)*r*0.25);
+          for(let sgi=1;sgi<=3;sgi++){
+            const rr=r*(0.25+0.9*sgi/3), ang=base+(Math.random()-0.5)*0.6;
+            ctx.lineTo(px+Math.cos(ang)*rr, py+Math.sin(ang)*rr);
+          }
+          ctx.stroke();
+        }
+        ctx.fillStyle=`rgba(255,250,180,${a*0.5})`;
+        ctx.beginPath(); ctx.arc(px,py,r*0.3*(0.6+0.5*zap),0,6.2832); ctx.fill();
+        ctx.shadowBlur=0;
+      }
+    }
+    ctx.restore();
+  }
+}
+// descent / ascent fade — a dip to dark with the layer swapped at the midpoint,
+// so we only ever render one layer at a time. Earth-brown going down, cool dawn
+// coming up. Drawn in screen space, over the world, under the HUD.
+function drawTransit(){
+  if(!transit) return;
+  const k=transit.t/transit.dur;            // 0..1
+  const veil=1-Math.abs(k-0.5)*2;           // 0 -> 1 -> 0 triangle (full dark at midpoint)
+  const down=transit.dir==='down';
+  ctx.save();
+  ctx.fillStyle = down ? 'rgba(14,9,5,'+veil+')' : 'rgba(7,12,20,'+veil+')';
+  ctx.fillRect(0,0,viewCss,viewCss);
+  // drifting strata bands for a sense of moving through earth
+  ctx.globalAlpha=veil*0.5;
+  ctx.fillStyle = down ? '#1c130a' : '#10202e';
+  const drift=(down?1:-1)*k*viewCss*0.5;
+  for(let i=-1;i<6;i++){
+    const yy=((i*viewCss/5 + drift) % viewCss + viewCss) % viewCss;
+    ctx.fillRect(0, yy, viewCss, Math.max(2,viewCss*0.012));
+  }
+  ctx.globalAlpha=Math.min(1,veil*1.7);
+  ctx.fillStyle='#d7ecf7';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font=`${Math.round(viewCss*0.045)}px "Press Start 2P","Space Mono",monospace`;
+  ctx.fillText(transit.label, viewCss/2, viewCss*0.47);
+  ctx.font=`${Math.round(viewCss*0.025)}px "Space Mono",monospace`;
+  ctx.fillStyle='#9fb6cc';
+  ctx.fillText(down?'into the underground':'back to the surface', viewCss/2, viewCss*0.54);
+  ctx.restore();
+  ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.globalAlpha=1;
+}
+function drawHog(h){
+  const p=roamPx(h), r=Math.max(3,tile*0.46);
+  // spikes
+  ctx.strokeStyle=C.hogSpike; ctx.lineWidth=Math.max(1,tile*0.12);
+  for(let i=0;i<10;i++){ const a=i/10*6.2832; ctx.beginPath();
+    ctx.moveTo(p.x+Math.cos(a)*r*0.7, p.y+Math.sin(a)*r*0.7);
+    ctx.lineTo(p.x+Math.cos(a)*r*1.25, p.y+Math.sin(a)*r*1.25); ctx.stroke(); }
+  // body
+  ctx.fillStyle=h.flash>0 ? '#fff7e0' : C.hog;
+  ctx.shadowColor=h.flash>0?'#fff':'rgba(0,0,0,.6)'; ctx.shadowBlur=h.flash>0?tile*1.4:tile*0.4;
+  ctx.beginPath(); ctx.arc(p.x,p.y,r,0,6.2832); ctx.fill(); ctx.shadowBlur=0;
+  // snout dot toward facing
+  const fx=h.facing[0]||0, fy=h.facing[1]||0;
+  ctx.fillStyle=C.hogDark; ctx.beginPath();
+  ctx.arc(p.x+fx*r*0.6, p.y+fy*r*0.6, r*0.22, 0, 6.2832); ctx.fill();
+}
+function drawFst(f){
+  const p=roamPx(f), r=Math.max(2.6,tile*0.4);
+  const fl=0.8+0.2*Math.sin(animClock*12+f.tx);
+  const g=ctx.createRadialGradient(p.x,p.y+r*0.2,1, p.x,p.y,r*1.4);
+  g.addColorStop(0,C.fst); g.addColorStop(0.6,C.fstB); g.addColorStop(1,'rgba(255,122,31,0)');
+  ctx.fillStyle=g; ctx.shadowColor=C.fstB; ctx.shadowBlur=f.flash>0?tile*1.4:tile*0.7;
+  ctx.beginPath(); ctx.arc(p.x,p.y,r*fl,0,6.2832); ctx.fill(); ctx.shadowBlur=0;
+}
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawDoor(x,y,d){
+  const px=cx(x), py=cy(y), v=DIRV[d];
+  // faint violet tile tint
+  ctx.fillStyle='rgba(124,77,255,0.14)';
+  ctx.fillRect(x*tile+tile*0.06, y*tile+tile*0.06, tile*0.88, tile*0.88);
+  // chevrons pointing the only way through
+  ctx.save();
+  ctx.translate(px,py); ctx.rotate(Math.atan2(v[1],v[0]));
+  ctx.strokeStyle=C.door; ctx.lineWidth=Math.max(1.5,tile*0.13);
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.shadowColor=C.doorGlow; ctx.shadowBlur=tile*0.5;
+  const s=tile*0.26;
+  for(let i=0;i<2;i++){
+    const ox=(i-0.4)*s*0.95;
+    ctx.globalAlpha = i===1 ? 1 : 0.55;
+    ctx.beginPath(); ctx.moveTo(ox-s*0.5,-s); ctx.lineTo(ox+s*0.5,0); ctx.lineTo(ox-s*0.5,s); ctx.stroke();
+  }
+  ctx.restore(); ctx.shadowBlur=0; ctx.globalAlpha=1;
+}
+function drawSealFlashes(){
+  for(const s of sealFlashes){
+    const a=Math.max(0,s.t/0.6);
+    ctx.fillStyle=`rgba(124,77,255,${a*0.4})`;
+    ctx.fillRect(s.x*tile, s.y*tile, tile, tile);
+    ctx.strokeStyle=`rgba(176,124,255,${a})`; ctx.lineWidth=2;
+    ctx.strokeRect(s.x*tile+1, s.y*tile+1, tile-2, tile-2);
+  }
+}
+function drawPatcher(p){
+  const pt=roamPx(p), r=Math.max(3,tile*0.42);
+  ctx.save();
+  // body — a smooth violet block (the inverse of the spiky hedgehog)
+  ctx.fillStyle = p.flash>0 ? C.patchHi : C.patch;
+  ctx.shadowColor = p.flash>0 ? '#fff' : 'rgba(124,77,255,0.75)';
+  ctx.shadowBlur = p.flash>0 ? tile*1.3 : tile*0.5;
+  roundRect(pt.x-r, pt.y-r, r*2, r*2, r*0.42); ctx.fill();
+  ctx.shadowBlur=0;
+  // brick hatch
+  ctx.strokeStyle='rgba(22,10,44,0.7)'; ctx.lineWidth=Math.max(1,tile*0.07);
+  ctx.beginPath();
+  ctx.moveTo(pt.x-r, pt.y); ctx.lineTo(pt.x+r, pt.y);
+  ctx.moveTo(pt.x-r*0.1, pt.y-r); ctx.lineTo(pt.x-r*0.1, pt.y);
+  ctx.moveTo(pt.x-r*0.5, pt.y); ctx.lineTo(pt.x-r*0.5, pt.y+r);
+  ctx.moveTo(pt.x+r*0.45, pt.y); ctx.lineTo(pt.x+r*0.45, pt.y+r);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBlob(){
+  if(!blob.active) return;
+  const r=tile*0.55;
+  const blink=(Math.sin(blob.phase*9)+1)/2;     // torch flicker 0..1
+  const on=blink>0.45;
+  // blinking yellow torch halo
+  if(on){
+    const g=ctx.createRadialGradient(blob.x,blob.y,1, blob.x,blob.y,r*2.6);
+    g.addColorStop(0,`rgba(255,220,60,${0.55*blink})`);
+    g.addColorStop(0.5,`rgba(255,180,30,${0.22*blink})`);
+    g.addColorStop(1,'rgba(255,180,30,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(blob.x,blob.y,r*2.6,0,6.2832); ctx.fill();
+  }
+  // grey -> black orb body
+  const bg=ctx.createRadialGradient(blob.x-r*0.3,blob.y-r*0.35,1, blob.x,blob.y,r);
+  bg.addColorStop(0, on?'#666':'#3a3a3a');
+  bg.addColorStop(0.7,'#161616');
+  bg.addColorStop(1,'#000');
+  ctx.fillStyle=bg;
+  ctx.shadowColor=on?'rgba(255,200,40,0.7)':'rgba(0,0,0,0.55)';
+  ctx.shadowBlur=on?tile*0.9:tile*0.3;
+  ctx.beginPath(); ctx.arc(blob.x,blob.y,r,0,6.2832); ctx.fill(); ctx.shadowBlur=0;
+  // rim
+  ctx.strokeStyle=on?'rgba(255,210,60,0.85)':'rgba(120,120,120,0.45)';
+  ctx.lineWidth=Math.max(1,tile*0.06);
+  ctx.beginPath(); ctx.arc(blob.x,blob.y,r,0,6.2832); ctx.stroke();
+}
+
+function drawZones(){
+  const w=viewCss, h=viewCss, R=Math.min(w,h)*0.13;
+  ctx.strokeStyle=C.zone; ctx.lineWidth=1;
+  // quadrant diagonals (steering hint), relative to the screen centre
+  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(w,h); ctx.moveTo(w,0); ctx.lineTo(0,h); ctx.stroke();
+  // centre stop ring
+  ctx.beginPath(); ctx.arc(w/2,h/2,R,0,6.2832);
+  ctx.strokeStyle= stopped ? 'rgba(255,77,109,.5)' : 'rgba(120,180,220,.18)';
+  ctx.lineWidth=2; ctx.stroke();
+}
+
+function drawDarkness(){
+  if(!dark.active) return;
+  const ps=worldToScreen(playerWorld().x, playerWorld().y);
+  const clearR=Math.max(8, dark.clearCells*tile*cam.scale);
+  const fogR=clearR + 6*tile*cam.scale;     // ~3-cell fog band, then black
+  const g=ctx.createRadialGradient(ps.x,ps.y,clearR, ps.x,ps.y,fogR);
+  g.addColorStop(0,`rgba(${C.dark},0)`);
+  g.addColorStop(0.55,`rgba(${C.dark},0.6)`);
+  g.addColorStop(1,`rgba(${C.dark},0.985)`);
+  ctx.fillStyle=g; ctx.fillRect(0,0,viewCss,viewCss);
+  // brief flash when the lights cut out
+  if(dark.flash>0){ ctx.fillStyle=`rgba(0,0,0,${0.35*(dark.flash/0.4)})`; ctx.fillRect(0,0,viewCss,viewCss); }
+}
+
+function drawCountdown(){
+  ctx.save();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  if(countdown>0){
+    ctx.fillStyle='rgba(5,9,15,0.32)'; ctx.fillRect(0,0,viewCss,viewCss);
+    ctx.fillStyle='rgba(52,225,255,0.92)';
+    ctx.shadowColor='rgba(52,225,255,0.8)'; ctx.shadowBlur=18;
+    ctx.font=`${Math.round(viewCss*0.09)}px "Press Start 2P","Space Mono",monospace`;
+    ctx.fillText('READY', viewCss/2, viewCss*0.46);
+    ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(215,236,247,0.85)';
+    ctx.font=`${Math.round(viewCss*0.03)}px "Space Mono",monospace`;
+    ctx.fillText(flashTimer>0 ? 'memorise the route' : 'steer to begin', viewCss/2, viewCss*0.46 + viewCss*0.085);
+  } else if(goFlash>0){
+    const a=Math.min(1,goFlash/0.4);
+    ctx.fillStyle=`rgba(182,255,58,${a})`;
+    ctx.shadowColor=`rgba(182,255,58,${a})`; ctx.shadowBlur=22;
+    ctx.font=`${Math.round(viewCss*0.11)}px "Press Start 2P","Space Mono",monospace`;
+    ctx.fillText('GO!', viewCss/2, viewCss*0.46);
+  }
+  ctx.restore(); ctx.shadowBlur=0;
+}
+
+/* ============================================================
+   HUD
+   ============================================================ */
+function syncNextDir(){
+  const d = player.want!=='none' ? player.want : player.dir;
+  nextArrow.textContent = ARROW[d] || '•';
+  nextDirEl.classList.toggle('idle', d==='none');
+}
+function fmt(t){ const m=Math.floor(t/60), s=Math.floor(t%60); return m+':'+String(s).padStart(2,'0'); }
+let hudAcc=0;
+function syncHUD(dt){
+  hudAcc+=dt; if(hudAcc<0.1) return; hudAcc=0;
+  elLevel.textContent=level;
+  elStamp.textContent=Math.max(0,Math.ceil(timers.stamp));
+  elHog.textContent  =Math.max(0,Math.ceil(timers.hog));
+  elFire.textContent =Math.max(0,Math.ceil(timers.fire));
+  elPatch.textContent=Math.max(0,Math.ceil(timers.patch));
+  elBlob.textContent = dark.active ? Math.max(0,Math.ceil(dark.ttl))
+                     : blob.active ? '!'
+                     : Math.max(0,Math.ceil(timers.dark));
+  topbarEl.classList.toggle('dark', dark.active);
+  if(!gameWon && !gameOver){
+    if(paused){ statusEl.textContent='PAUSED — press P or tap to resume'; statusEl.classList.remove('warn'); }
+    else if(countdown>0){ statusEl.textContent = twoLevel ? 'Two-level maze — find the tunnel down' : (levelShape!=='rect' ? SHAPE_LABEL[levelShape].toUpperCase()+' maze — memorise the route' : 'Get ready — memorise the route'); statusEl.classList.remove('warn'); }
+    else if(transit){ statusEl.textContent = transit.dir==='down' ? 'Descending…' : 'Surfacing…'; statusEl.classList.remove('warn'); }
+    else if(dark.active){ statusEl.textContent='LIGHTS OUT — '+Math.ceil(dark.ttl)+'s'; statusEl.classList.add('warn'); }
+    else if(blob.active){ statusEl.textContent='Torch blob closing in — keep moving'; statusEl.classList.add('warn'); }
+    else if(!solvable){ statusEl.textContent='Boxed in — wait for a hole to open'; statusEl.classList.add('warn'); }
+    else if(stopped){ statusEl.textContent='STOPPED — tap centre / Space to resume'; statusEl.classList.remove('warn'); }
+    else if(twoLevel && layer==='under'){ statusEl.textContent='Underground — pick a tunnel up (only one reaches the exit)'; statusEl.classList.remove('warn'); }
+    else if(twoLevel && layer==='over'){ statusEl.textContent='Surface — reach a tunnel, or the exit if you found the right quadrant'; statusEl.classList.remove('warn'); }
+    else if(player.dir==='none' && player.want==='none'){
+      statusEl.textContent = (trail.length<=2) ? 'Steer to begin' : "Dead end — steer to an opening (don't double back)";
+      statusEl.classList.add('warn');
+    }
+    else { statusEl.textContent='Steer to the exit • never cross your own line'; statusEl.classList.remove('warn'); }
+  }
+  // reflect stop state on D-pad centre
+  const cBtn=document.querySelector('.dbtn.center');
+  cBtn.classList.toggle('stopped',stopped);
+  cBtn.textContent = stopped ? 'GO' : 'STOP';
+  syncShakeBox();
+}
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+function overlayOpen(){ return document.querySelector('.overlay.show')!==null; }
+
+function frame(t){
+  let dt=(t-now0)/1000; now0=t;
+  if(dt>0.05) dt=0.05;                 // clamp after tab switches
+  if(!paused && !gameWon && !gameOver && !overlayOpen()){
+    if(countdown>0){
+      // count-in: no movement, no hazards — just the route flash
+      countdown=Math.max(0,countdown-dt);
+      if(flashTimer>0) flashTimer=Math.max(0,flashTimer-dt);
+      if(countdown===0) goFlash=0.5;
+    } else if(transit){
+      // mid-transition between layers: everything holds while the screen dips
+      runTime+=dt;
+      stepTransit(dt);
+    } else {
+      if(goFlash>0) goFlash=Math.max(0,goFlash-dt);
+      runTime+=dt;
+      tickEvents(dt);
+      stepPlayer(dt);
+      for(const h of hogs) roamUpdate(h,dt);
+      for(const f of fsts) roamUpdate(f,dt);
+      for(const p of patchers) roamUpdate(p,dt);
+      if(stampFlash){ stampFlash.t-=dt; if(stampFlash.t<=0) stampFlash=null; }
+      if(sealFlashes.length){ for(const s of sealFlashes) s.t-=dt; sealFlashes=sealFlashes.filter(s=>s.t>0); }
+    }
+  }
+  // duck the music under overlays / blackouts so it stays in the background
+  Music.duck( (paused||overlayOpen()) ? 0.3 : (dark.active ? 0.55 : 1) );
+  updateCamera(dt);
+  render();
+  if(paused) drawPauseOverlay();
+  syncHUD(dt);
+  requestAnimationFrame(frame);
+}
+// full-screen "PAUSED" veil
+function drawPauseOverlay(){
+  ctx.save();
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='rgba(5,9,15,0.72)'; ctx.fillRect(0,0,viewCss,viewCss);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(52,225,255,0.95)';
+  ctx.shadowColor='rgba(52,225,255,0.8)'; ctx.shadowBlur=18;
+  ctx.font=`${Math.round(viewCss*0.085)}px "Press Start 2P","Space Mono",monospace`;
+  ctx.fillText('PAUSED', viewCss/2, viewCss*0.46);
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(215,236,247,0.85)';
+  ctx.font=`${Math.round(viewCss*0.03)}px "Space Mono",monospace`;
+  ctx.fillText('press P or tap Resume', viewCss/2, viewCss*0.46 + viewCss*0.085);
+  ctx.restore(); ctx.shadowBlur=0;
+}
+
+/* ============================================================
+   INPUT — touch quadrants, D-pad, keyboard
+   ============================================================ */
+function toggleStop(){ if(gameWon||gameOver) return; stopped=!stopped; syncHUD(1); }
+function togglePause(){
+  if(gameWon||gameOver||overlayOpen()) return;
+  paused=!paused;
+  syncPauseUI();
+  syncHUD(1);
+}
+function syncPauseUI(){
+  const b=document.getElementById('btnPause');
+  if(b){ b.innerHTML = paused ? '&#9654;' : '&#9208;'; b.title = (paused?'Resume':'Pause')+' (P)'; b.classList.toggle('on', paused); }
+}
+
+canvas.addEventListener('pointerdown', e=>{
+  if(gameWon||gameOver) return;
+  if(paused){ e.preventDefault(); togglePause(); return; }   // tap the board to resume
+  e.preventDefault();
+  const r=canvas.getBoundingClientRect();
+  const x=e.clientX-r.left, y=e.clientY-r.top;
+  const w=r.width, h=r.height, R=Math.min(w,h)*0.13;
+  const dx=x-w/2, dy=y-h/2;
+  if(Math.hypot(dx,dy)<=R){ toggleStop(); return; }   // centre = stop/go
+  // pick quadrant by which diagonal half dominates
+  if(Math.abs(dx) > Math.abs(dy)) setWant(dx<0?'left':'right');
+  else                            setWant(dy<0?'up':'down');
+}, {passive:false});
+
+// D-pad
+document.getElementById('dpad').addEventListener('pointerdown', e=>{
+  if(overlayOpen()) return;
+  const b=e.target.closest('button'); if(!b) return;
+  e.preventDefault();
+  if(b.dataset.act==='stop'){ toggleStop(); return; }
+  if(b.dataset.dir) setWant(b.dataset.dir);
+}, {passive:false});
+
+// keyboard (desktop) — harmless on mobile
+const KEY={ ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right',
+            KeyW:'up', KeyS:'down', KeyA:'left', KeyD:'right' };
+window.addEventListener('keydown', e=>{
+  // typing in the account fields stays normal; Enter there submits (logs in)
+  if(e.target && e.target.matches && e.target.matches('input,textarea')){
+    if(e.key==='Enter' && overlayOpen()){
+      const ov=document.querySelector('.overlay.show');
+      const pr=firstVis([...ov.querySelectorAll('.btn.primary')]);
+      if(pr){ e.preventDefault(); pr.click(); }
+    }
+    return;
+  }
+  if(e.target && e.target.matches && e.target.matches('select')) return;
+
+  // any pop-up open: Tab/Enter/Space/Esc + per-button keys act on that overlay
+  if(overlayOpen()){ handleOverlayKey(e, document.querySelector('.overlay.show')); return; }
+
+  if(e.code==='Space'){ e.preventDefault(); toggleStop(); return; }
+  if(e.code==='KeyP'){ e.preventDefault(); togglePause(); return; }       // full pause / resume
+  if(e.code==='KeyN'){ startLevel(); return; }             // fresh maze at the current level
+  if(e.code==='KeyH'){ toggleHint(); persistActive(); return; }
+  if(e.code==='KeyB'){ e.preventDefault(); doShakeAction(); return; }   // mow / fire ball (shake)
+  if(e.code==='KeyF'){ e.preventDefault(); if(ballCount>0 && !transit) fireBall(); return; }  // fire held ball
+  if(e.code==='KeyG'){ document.getElementById('btnMode').click(); return; }      // toggle game/custom mode
+  if(e.code==='KeyM'){ document.getElementById('btnMusic').click(); return; }   // music
+  if(e.code==='KeyI'){ document.getElementById('btnInfo').click(); return; }    // how to play
+  if(e.code==='KeyC'){ document.getElementById('btnCredits').click(); return; } // credits
+  if(e.code==='KeyU'){ document.getElementById('btnAcct').click(); return; }    // account (user)
+  if(KEY[e.code]){ e.preventDefault(); setWant(KEY[e.code]); }
+});
+
+/* ============================================================
+   UI WIRING
+   ============================================================ */
+let pendingSize=24;
+function toggleHint(){ hintOn=!hintOn; const b=document.getElementById('btnHint'); b.innerHTML='Hint: '+(hintOn?'on':'off')+'<span class="kc">H</span>'; b.classList.toggle('on',hintOn); }
+
+/* ---------- overlay keyboard / focus helpers ----------
+   When an overlay opens we move focus to the button most likely to be pressed
+   (its primary action, or the username field on the login screen) so Enter /
+   Space act on it immediately. Tab is trapped inside the open overlay, Escape
+   dismisses it where that makes sense, and every button carries a single-key
+   shortcut declared via data-key (shown on the button as a small key cap). */
+function isVis(el){ if(!el || el.offsetParent===null) return false; const s=getComputedStyle(el); return s.visibility!=='hidden' && s.display!=='none'; }
+function firstVis(list){ for(const el of list) if(isVis(el)) return el; return null; }
+function overlayFocusables(ov){ return [...ov.querySelectorAll('button,input,select,textarea')].filter(el=> isVis(el) && !el.disabled); }
+function overlayBtns(ov){ return [...ov.querySelectorAll('button')].filter(el=> isVis(el) && !el.disabled); }
+function overlayFocusTarget(ov){
+  const af=firstVis([...ov.querySelectorAll('[data-autofocus]')]);
+  // on touch, don't auto-focus a text field (it would pop the on-screen keyboard)
+  const coarse = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+  if(af && !(coarse && (af.tagName==='INPUT'||af.tagName==='TEXTAREA'))) return af;
+  return firstVis([...ov.querySelectorAll('.btn.primary')]) || overlayFocusables(ov)[0] || null;
+}
+function show(id){
+  const ov=document.getElementById(id); ov.classList.add('show');
+  // focus after layout so offsetParent/visibility are settled (covers acct's two states)
+  requestAnimationFrame(()=>{ const t=overlayFocusTarget(ov); if(t){ try{ t.focus(); }catch(e){} } });
+}
+function hide(id){ document.getElementById(id).classList.remove('show'); }
+
+function handleOverlayKey(e, ov){
+  if(!ov) return;
+  const k=e.key;
+  if(k==='Tab'){
+    const f=overlayFocusables(ov); if(!f.length) return;
+    e.preventDefault();
+    let i=f.indexOf(document.activeElement);
+    i = (i<0 ? (e.shiftKey?-1:0) : i+(e.shiftKey?-1:1));
+    i = (i+f.length)%f.length; f[i].focus(); return;
+  }
+  if(k==='Escape'){
+    const x=firstVis([...ov.querySelectorAll('[data-esc],.closeX')]);
+    if(x){ e.preventDefault(); x.click(); } return;
+  }
+  if(k==='Enter' || e.code==='Space'){
+    const a=document.activeElement;
+    if(a && a.tagName==='BUTTON' && ov.contains(a)) return;   // let the browser activate the focused button
+    const t=overlayFocusTarget(ov);
+    if(t && t.tagName==='BUTTON'){ e.preventDefault(); t.click(); }
+    return;
+  }
+  // single-key shortcuts (letters + arrow names) declared on each visible button
+  const kk=(k||'').toLowerCase();
+  for(const b of overlayBtns(ov)){
+    if((b.dataset.key||'').toLowerCase()===kk){ e.preventDefault(); b.click(); return; }
+  }
+}
+
+document.getElementById('btnNew').addEventListener('click', ()=> startLevel());        // fresh maze, same level
+document.getElementById('btnPause').addEventListener('click', togglePause);
+
+/* music toggle + one-time audio unlock on the first user gesture */
+const musicBtn=document.getElementById('btnMusic');
+function syncMusicBtn(){ const on=Music.enabled; musicBtn.classList.toggle('on',on); musicBtn.classList.toggle('off',!on); musicBtn.title='Music '+(on?'on':'off')+' (M)'; }
+musicBtn.addEventListener('click', ()=>{ Music.toggle(); syncMusicBtn(); persistActive(); });
+function unlockAudioOnce(){
+  Music.unlock();
+  if(Motion.available() && !Motion.enabled && !Motion.needsPermission()) Motion.enable();  // Android: arm now
+  window.removeEventListener('pointerdown',unlockAudioOnce,true); window.removeEventListener('keydown',unlockAudioOnce,true);
+}
+window.addEventListener('pointerdown', unlockAudioOnce, true);
+window.addEventListener('keydown',     unlockAudioOnce, true);
+
+/* shake / ball box: enable motion (iOS needs the gesture) then run the action */
+Motion.setShakeHandler(()=> doShakeAction());
+shakeBox.addEventListener('click', ()=>{
+  if(Motion.available() && !Motion.enabled){ Motion.enable(); setTimeout(syncShakeBox,400); }
+  doShakeAction();
+});
+document.getElementById('btnFire').addEventListener('click', ()=>{
+  if(gameWon||gameOver||countdown>0||transit||overlayOpen()) return;
+  if(ballCount>0){ fireBall(); }
+});
+document.getElementById('winNext').addEventListener('click', nextLevel);
+document.getElementById('winRestart').addEventListener('click', startGame);
+document.getElementById('overRetry').addEventListener('click', retryLevel);
+document.getElementById('overRestart').addEventListener('click', startGame);
+document.getElementById('btnInfo').addEventListener('click', ()=> show('infoOverlay'));
+document.getElementById('infoClose').addEventListener('click', ()=> hide('infoOverlay'));
+document.getElementById('infoX').addEventListener('click', ()=> hide('infoOverlay'));
+
+/* tabbed info box — header (X + tabs) and footer stay fixed; prev/next walk
+   the tabs so everything is reachable without scrolling on a phone. */
+(function(){
+  const tabs=[...document.querySelectorAll('#infoTabs .tab')];
+  const panels=[...document.querySelectorAll('#infoOverlay .tabpanel')];
+  const order=tabs.map(t=>t.dataset.tab);
+  const prevBtn=document.getElementById('infoPrev');
+  const nextBtn=document.getElementById('infoNext');
+  const wrap=document.querySelector('#infoOverlay .tabwrap');
+  let cur=0;
+  function showTab(i){
+    cur=Math.max(0, Math.min(order.length-1, i));
+    const name=order[cur];
+    tabs.forEach(t=> t.classList.toggle('active', t.dataset.tab===name));
+    panels.forEach(p=> p.classList.toggle('active', p.dataset.panel===name));
+    if(wrap) wrap.scrollTop=0;
+    prevBtn.style.visibility = cur===0 ? 'hidden' : 'visible';
+    nextBtn.innerHTML = (cur===order.length-1 ? 'Done' : 'Next ›') + '<span class="kc">→</span>';
+  }
+  tabs.forEach((t,i)=> t.addEventListener('click', ()=> showTab(i)));
+  prevBtn.addEventListener('click', ()=> showTab(cur-1));
+  nextBtn.addEventListener('click', ()=>{ if(cur===order.length-1) hide('infoOverlay'); else showTab(cur+1); });
+  document.getElementById('btnInfo').addEventListener('click', ()=> showTab(0));   // always open on the first tab
+  showTab(0);
+})();
+document.getElementById('selSize').addEventListener('change', e=>{ pendingSize=parseInt(e.target.value,10); startLevel(); persistActive(); });
+document.getElementById('selShape').addEventListener('change', e=>{ pendingShape=e.target.value; startLevel(); persistActive(); });
+document.getElementById('spd').addEventListener('input', e=>{ SPEED_PX=parseInt(e.target.value,10); document.getElementById('spdVal').textContent=SPEED_PX; persistActive(); });
+document.getElementById('btnHint').addEventListener('click', ()=>{ toggleHint(); persistActive(); });
+
+/* Game vs Custom mode. Game = size/shape scale with the level (no options shown);
+   Custom = pick your own size & shape (options shown where Line speed used to be). */
+function syncModeUI(){
+  const b=document.getElementById('btnMode');
+  b.textContent='Mode: '+(gameMode?'Game':'Custom');
+  b.classList.toggle('on', gameMode);
+  document.getElementById('customOpts').style.display = gameMode ? 'none' : '';
+  document.getElementById('gameNote').style.display   = gameMode ? '' : 'none';
+  const tb=document.getElementById('btnTwoTest');
+  if(tb){
+    const LBL=['Two-level mazes: Off','Two-level: sealed (easy)','Two-level: 2 linked','Two-level: 3 linked'];
+    tb.textContent=LBL[customTwoLevel]||LBL[0];
+    tb.classList.toggle('on', customTwoLevel>0);
+  }
+}
+document.getElementById('btnMode').addEventListener('click', ()=>{
+  gameMode=!gameMode; syncModeUI(); startLevel(); persistActive();
+});
+document.getElementById('btnTwoTest').addEventListener('click', ()=>{
+  customTwoLevel=(customTwoLevel+1)%4; syncModeUI(); startLevel(); persistActive();
+});
+
+/* ============================================================
+   CREDITS SPLASH — a self-contained JS canvas animation: a little mock
+   maze with a glowing line tracing through it, then an "encore" row of all
+   the player objects (line, hedgehog, fire-starter, patcher, grass, ball,
+   torch blob and the teleport pad), each cycling cute predefined sprite
+   actions for 2–3s.
+   Runs its own rAF only while the overlay is open.
+   ============================================================ */
+const Credits = (() => {
+  const cv = document.getElementById('creditsCanvas');
+  const g  = cv ? cv.getContext('2d') : null;
+  let raf=0, running=false, last=0, gc=0, actors=null;
+
+  // deterministic scatter for the mock-maze wall blocks
+  function lcg(seed){ let s=seed>>>0; return ()=>{ s=(Math.imul(s,1664525)+1013904223)>>>0; return s/4294967296; }; }
+  function segDist(px,py,ax,ay,bx,by){
+    const vx=bx-ax, vy=by-ay, wx=px-ax, wy=py-ay;
+    const L=vx*vx+vy*vy; let t=L? (wx*vx+wy*vy)/L : 0; t=Math.max(0,Math.min(1,t));
+    const dx=px-(ax+vx*t), dy=py-(ay+vy*t); return Math.hypot(dx,dy);
+  }
+  // normalized route through the mock maze
+  const ROUTE=[[0.0,0.5],[0.1,0.5],[0.1,0.18],[0.26,0.18],[0.26,0.82],[0.42,0.82],
+               [0.42,0.4],[0.58,0.4],[0.58,0.74],[0.72,0.74],[0.72,0.26],[0.86,0.26],[0.86,0.55],[1.0,0.55]];
+
+  function fit(){
+    const wcss=cv.clientWidth||360, hcss=240;
+    const d=Math.min(window.devicePixelRatio||1,2);
+    if(cv.width!==Math.round(wcss*d)||cv.height!==Math.round(hcss*d)){
+      cv.width=Math.round(wcss*d); cv.height=Math.round(hcss*d); cv.style.height=hcss+'px';
+    }
+    g.setTransform(d,0,0,d,0,0);
+    return {w:wcss,h:hcss};
+  }
+
+  function drawMaze(w){
+    const mx=10,my=8,mw=w-20,mh=98;
+    // floor
+    g.fillStyle='#0a1019';
+    rr(mx,my,mw,mh,10); g.fill();
+    g.strokeStyle='#18283c'; g.lineWidth=1.5; rr(mx,my,mw,mh,10); g.stroke();
+    // wall scatter (kept clear of the route corridor)
+    const gcN=10, grN=4, cw=mw/gcN, ch=mh/grN, rnd=lcg(20240607);
+    g.fillStyle='#21344d';
+    for(let r=0;r<grN;r++) for(let c=0;c<gcN;c++){
+      const rv=rnd(); if(rv>0.34) continue;
+      const nx=(c+0.5)/gcN, ny=(r+0.5)/grN;
+      let near=false;
+      for(let i=0;i<ROUTE.length-1 && !near;i++)
+        if(segDist(nx,ny,ROUTE[i][0],ROUTE[i][1],ROUTE[i+1][0],ROUTE[i+1][1])<0.075) near=true;
+      if(near) continue;
+      const bx=mx+c*cw+cw*0.18, by=my+r*ch+ch*0.18;
+      rr(bx,by,cw*0.64,ch*0.64,3); g.fill();
+    }
+    const P=(t)=>{ // point on the route at param 0..1 of total length
+      let lens=[],tot=0;
+      for(let i=0;i<ROUTE.length-1;i++){ const L=Math.hypot(ROUTE[i+1][0]-ROUTE[i][0],ROUTE[i+1][1]-ROUTE[i][1]); lens.push(L); tot+=L; }
+      let d=t*tot;
+      for(let i=0;i<lens.length;i++){ if(d<=lens[i]||i===lens.length-1){ const f=lens[i]?d/lens[i]:0;
+        const x=ROUTE[i][0]+(ROUTE[i+1][0]-ROUTE[i][0])*f, y=ROUTE[i][1]+(ROUTE[i+1][1]-ROUTE[i][1])*f;
+        return [mx+x*mw, my+y*mh]; } d-=lens[i]; }
+      return [mx+mw,my+mh*0.5];
+    };
+    // entry / exit
+    const e=P(0), x=P(1);
+    g.fillStyle='#39ff9b'; g.shadowColor='#39ff9b'; g.shadowBlur=10; dot(e[0],e[1],5); g.shadowBlur=0;
+    g.fillStyle='#ffcf3a'; g.shadowColor='#ffcf3a'; g.shadowBlur=10; dot(x[0],x[1],5); g.shadowBlur=0;
+    // animated cyan line drawing through the maze, looping
+    const phase=(gc*0.16)%1.18, drawn=Math.min(1,phase);
+    const N=64; g.strokeStyle='#34e1ff'; g.lineWidth=3.4; g.lineCap='round'; g.lineJoin='round';
+    g.shadowColor='#34e1ff'; g.shadowBlur=8; g.beginPath();
+    for(let i=0;i<=N;i++){ const t=drawn*i/N, p=P(t); if(i===0) g.moveTo(p[0],p[1]); else g.lineTo(p[0],p[1]); }
+    g.stroke(); g.shadowBlur=0;
+    const hp=P(drawn);
+    g.fillStyle='#9af3ff'; g.shadowColor='#9af3ff'; g.shadowBlur=10; dot(hp[0],hp[1],4); g.shadowBlur=0;
+  }
+
+  function rr(x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+  function dot(x,y,r){ g.beginPath(); g.arc(x,y,r,0,6.2832); g.fill(); }
+
+  // ---- per-actor sprite drawers (centered at 0,0, base radius r) ----
+  function sLine(r,c){ // glowing head with a little wagging tail
+    for(let i=4;i>=1;i--){ const a=0.12*i; const ox=-i*r*0.5, oy=Math.sin(c*5 - i*0.6)*r*0.25;
+      g.fillStyle=`rgba(52,225,255,${a})`; dot(ox,oy,r*0.5); }
+    g.fillStyle='#9af3ff'; g.shadowColor='#34e1ff'; g.shadowBlur=12; dot(0,0,r*0.62); g.shadowBlur=0;
+  }
+  function sHog(r,c){
+    g.strokeStyle='#3d2814'; g.lineWidth=Math.max(1,r*0.16);
+    for(let i=0;i<10;i++){ const a=i/10*6.2832; g.beginPath();
+      g.moveTo(Math.cos(a)*r*0.7,Math.sin(a)*r*0.7); g.lineTo(Math.cos(a)*r*1.25,Math.sin(a)*r*1.25); g.stroke(); }
+    g.fillStyle='#c08a55'; dot(0,0,r*0.85);
+    g.fillStyle='#5f3f24'; dot(r*0.5,-r*0.1,r*0.18);  // snout
+    g.fillStyle='#101820'; dot(r*0.2,-r*0.3,r*0.1);   // eye
+  }
+  function sFire(r,c){
+    const fl=0.8+0.2*Math.sin(c*12);
+    const gr=g.createRadialGradient(0,r*0.2,1,0,0,r*1.5);
+    gr.addColorStop(0,'#ffd23f'); gr.addColorStop(0.6,'#ff7a1f'); gr.addColorStop(1,'rgba(255,122,31,0)');
+    g.fillStyle=gr; g.shadowColor='#ff7a1f'; g.shadowBlur=12; dot(0,0,r*1.05*fl); g.shadowBlur=0;
+  }
+  function sPatch(r,c){
+    g.fillStyle='#7c4dff'; g.shadowColor='rgba(124,77,255,.75)'; g.shadowBlur=8;
+    rr(-r*0.85,-r*0.85,r*1.7,r*1.7,r*0.35); g.fill(); g.shadowBlur=0;
+    g.strokeStyle='rgba(22,10,44,0.7)'; g.lineWidth=Math.max(1,r*0.12);
+    g.beginPath(); g.moveTo(-r*0.85,0); g.lineTo(r*0.85,0);
+    g.moveTo(-r*0.1,-r*0.85); g.lineTo(-r*0.1,0); g.moveTo(-r*0.45,0); g.lineTo(-r*0.45,r*0.85); g.moveTo(r*0.4,0); g.lineTo(r*0.4,r*0.85); g.stroke();
+  }
+  function sGrass(r,c){ // swaying tuft of blades, grows/shrinks
+    const grow=0.6+0.4*((Math.sin(c*1.6)+1)/2);
+    for(let i=-2;i<=2;i++){ const bx=i*r*0.3, sway=Math.sin(c*3 + i)*r*0.18;
+      g.strokeStyle=i%2?'#39ff9b':'#b6ff3a'; g.lineWidth=Math.max(1.5,r*0.18); g.lineCap='round';
+      g.beginPath(); g.moveTo(bx,r*0.7); g.quadraticCurveTo(bx+sway*0.5,r*0.1, bx+sway, r*0.7-r*1.1*grow); g.stroke(); }
+  }
+  function sBall(r,c){
+    g.fillStyle='#ff4d6d'; g.shadowColor='#ff4d6d'; g.shadowBlur=12; dot(0,0,r*0.8); g.shadowBlur=0;
+    g.fillStyle='rgba(255,255,255,0.7)'; dot(-r*0.25,-r*0.25,r*0.2);
+  }
+  function sBlob(r,c){
+    const blink=(Math.sin(c*9)+1)/2, on=blink>0.45;
+    if(on){ const gr=g.createRadialGradient(0,0,1,0,0,r*2);
+      gr.addColorStop(0,`rgba(255,220,60,${0.6*blink})`); gr.addColorStop(0.5,`rgba(255,180,30,${0.2*blink})`); gr.addColorStop(1,'rgba(255,180,30,0)');
+      g.fillStyle=gr; dot(0,0,r*2); }
+    const bg=g.createRadialGradient(-r*0.3,-r*0.35,1,0,0,r*0.9);
+    bg.addColorStop(0,on?'#666':'#3a3a3a'); bg.addColorStop(0.7,'#161616'); bg.addColorStop(1,'#000');
+    g.fillStyle=bg; dot(0,0,r*0.9);
+    g.strokeStyle=on?'rgba(255,210,60,0.85)':'rgba(120,120,120,0.45)'; g.lineWidth=Math.max(1,r*0.1);
+    g.beginPath(); g.arc(0,0,r*0.9,0,6.2832); g.stroke();
+  }
+  function sTele(r,c){ // cyan-lime double spiral swirl with a bright core
+    const pulse=0.6+0.4*Math.sin(c*4);
+    const gr=g.createRadialGradient(0,0,1,0,0,r*1.5);
+    gr.addColorStop(0,'rgba(52,225,255,0)');
+    gr.addColorStop(0.55,`rgba(52,225,255,${0.22*pulse})`);
+    gr.addColorStop(1,'rgba(52,225,255,0)');
+    g.fillStyle=gr; dot(0,0,r*1.5);
+    g.lineWidth=Math.max(1.5,r*0.16); g.lineCap='round';
+    for(let s=0;s<2;s++){
+      g.strokeStyle = s ? '#b6ff3a' : '#34e1ff';
+      g.shadowColor = s ? '#b6ff3a' : '#34e1ff'; g.shadowBlur=8;
+      g.beginPath();
+      const base=c*3 + s*Math.PI;
+      for(let i=0;i<=26;i++){ const tt=i/26, ang=base+tt*Math.PI*2.3, rad=r*0.18+tt*r*0.78;
+        const px=Math.cos(ang)*rad, py=Math.sin(ang)*rad;
+        if(i===0) g.moveTo(px,py); else g.lineTo(px,py); }
+      g.stroke();
+    }
+    g.shadowBlur=0;
+    g.fillStyle='#eafff0'; g.shadowColor='#b6ff3a'; g.shadowBlur=10; dot(0,0,r*0.2); g.shadowBlur=0;
+  }
+
+  const DEFS=[
+    { name:'LINE',     draw:sLine,  acts:['hop','wiggle','pulse','dash'] },
+    { name:'HEDGEHOG', draw:sHog,   acts:['hop','spin','wiggle'] },
+    { name:'FIRE',     draw:sFire,  acts:['flicker','hop','pulse'] },
+    { name:'PATCHER',  draw:sPatch, acts:['wiggle','hop','spin'] },
+    { name:'GRASS',    draw:sGrass, acts:['grow','sway','wiggle'] },
+    { name:'BALL',     draw:sBall,  acts:['roll','hop','pulse'] },
+    { name:'BLOB',     draw:sBlob,  acts:['blink','hop','wobble'] },
+    { name:'TELEPORT', draw:sTele,  acts:['warp','spin','pulse','hop'] },
+  ];
+  function xform(act,c,r){
+    switch(act){
+      case 'hop':    return [0,-Math.abs(Math.sin(c*4))*r*0.7,0,1];
+      case 'wiggle': return [0,0,Math.sin(c*7)*0.35,1];
+      case 'pulse':  return [0,0,0,1+Math.sin(c*5)*0.14];
+      case 'spin':   return [0,0,c*3,1];
+      case 'dash':   return [Math.sin(c*3)*r*0.8,0,0,1];
+      case 'sway':   return [0,0,Math.sin(c*2.5)*0.22,1];
+      case 'wobble': return [0,Math.sin(c*6)*r*0.15,Math.sin(c*4)*0.25,1];
+      case 'roll':   return [Math.sin(c*1.8)*r*0.9,0,c*4,1];
+      case 'warp':   return [0,0,Math.sin(c*8)*0.4, 1+Math.abs(Math.sin(c*3))*0.22];
+      default:       return [0,0,0,1];   // flicker / blink / grow are intrinsic to the sprite
+    }
+  }
+  function build(){ actors=DEFS.map(d=>({ def:d, act:d.acts[0], clock:Math.random()*2, dur:2+Math.random() })); }
+
+  function drawActors(w,h,dt){
+    if(!actors) build();
+    const n=actors.length, top=128, baseY=top+58, r=Math.min(20, w/n*0.34);
+    g.font='8px "Space Mono",monospace'; g.textAlign='center'; g.textBaseline='middle';
+    for(let i=0;i<n;i++){
+      const a=actors[i];
+      a.clock+=dt; if(a.clock>=a.dur){ a.act=a.def.acts[(Math.random()*a.def.acts.length)|0]; a.dur=2+Math.random(); a.clock=0; }
+      const cxp=w*(i+0.5)/n;
+      const useC = (a.act==='flicker'||a.act==='blink'||a.act==='grow'||a.def.name==='TELEPORT') ? gc : a.clock;  // continuous for intrinsic / swirl
+      const [dx,dy,rot,sc]=xform(a.act,a.clock,r);
+      g.save(); g.translate(cxp+dx, baseY+dy); g.rotate(rot); g.scale(sc,sc);
+      a.def.draw(r, useC);
+      g.restore();
+      g.fillStyle='#6f8aa3'; g.fillText(a.def.name, cxp, baseY+r+18);
+    }
+  }
+
+  function frame(ts){
+    if(!running) return;
+    if(!last) last=ts;
+    const dt=Math.min(0.05,(ts-last)/1000); last=ts; gc+=dt;
+    const {w,h}=fit();
+    g.clearRect(0,0,w,h);
+    drawMaze(w);
+    drawActors(w,h,dt);
+    raf=requestAnimationFrame(frame);
+  }
+  return {
+    start(){ if(!g||running) return; running=true; last=0; raf=requestAnimationFrame(frame); },
+    stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  };
+})();
+
+const btnCredits=document.getElementById('btnCredits');
+if(btnCredits){
+  btnCredits.addEventListener('click', ()=>{ show('creditsOverlay'); Credits.start(); });
+  document.getElementById('creditsClose').addEventListener('click', ()=>{ Credits.stop(); hide('creditsOverlay'); });
+  document.getElementById('creditsX').addEventListener('click', ()=>{ Credits.stop(); hide('creditsOverlay'); });
+}
+
+/* ============================================================
+   STORAGE — localStorage with a graceful in-memory fallback so the file
+   works even where storage is blocked (e.g. a sandboxed preview frame).
+   Saves your level progress and a local-only account.
+   ============================================================ */
+const Store=(()=>{ let mem={}, ok=false;
+  try{ const k='__nm_test__'; localStorage.setItem(k,'1'); localStorage.removeItem(k); ok=true; }catch(e){ ok=false; }
+  return { ok,
+    get(k){ try{ return ok?localStorage.getItem(k):(k in mem?mem[k]:null); }catch(e){ return (k in mem?mem[k]:null); } },
+    set(k,v){ try{ if(ok) localStorage.setItem(k,v); else mem[k]=v; }catch(e){ mem[k]=v; } }
+  };
+})();
+const SKEY='neonmaze.save.v3';
+// NOTE: this is a toy, browser-only "account". The hash is NOT secure — it
+// only avoids storing the password in plain text on this device.
+function hashPass(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return ('0000000'+h.toString(16)).slice(-8); }
+function freshProfile(){ return { level:1, mode:'game', size:24, shape:'rect', speed:SPEED_PX, hint:hintOn, music:Music.enabled, best:{} }; }
+let store={ users:{}, current:null, guest:null, seen:false };
+function loadStore(){
+  store={ users:{}, current:null, guest:freshProfile(), seen:false };
+  try{ const raw=Store.get(SKEY); if(raw){ const o=JSON.parse(raw)||{};
+    store.users   = (o.users && typeof o.users==='object') ? o.users : {};
+    store.current = (o.current && store.users[o.current]) ? o.current : null;
+    store.guest   = o.guest || freshProfile();
+    store.seen    = !!o.seen;
+  } }catch(e){}
+  if(!store.guest) store.guest=freshProfile();
+}
+function saveStore(){ try{ Store.set(SKEY, JSON.stringify(store)); }catch(e){} }
+function activeProfile(){ return (store.current && store.users[store.current]) ? store.users[store.current].profile : store.guest; }
+function persistActive(){ const p=activeProfile(); p.level=level; p.mode=gameMode?'game':'custom'; p.size=pendingSize; p.shape=pendingShape; p.twoTest=customTwoLevel; p.speed=SPEED_PX; p.hint=hintOn; p.music=Music.enabled; saveStore(); }
+function applyProfile(p){
+  level=Math.max(1, (p.level|0)||1);
+  // mode: Custom only if explicitly saved as such; everything else (incl. legacy
+  // saves with no mode field or the old size:'auto') defaults to Game.
+  gameMode = (p.mode!=='custom');
+  pendingSize = [6,12,18,24,30,36].includes(p.size) ? p.size : 24;
+  pendingShape = ['rect','circle','hex'].includes(p.shape) ? p.shape : 'rect';
+  customTwoLevel = Math.max(0, Math.min(3, p.twoTest|0));
+  const sel=document.getElementById('selSize');   if(sel)  sel.value=String(pendingSize);
+  const shp=document.getElementById('selShape');  if(shp)  shp.value=pendingShape;
+  SPEED_PX=Math.min(160,Math.max(12,(p.speed|0)||75));
+  const spd=document.getElementById('spd'); if(spd) spd.value=String(SPEED_PX);
+  document.getElementById('spdVal').textContent=SPEED_PX;
+  hintOn=!!p.hint;
+  const hb=document.getElementById('btnHint'); hb.innerHTML='Hint: '+(hintOn?'on':'off')+'<span class="kc">H</span>'; hb.classList.toggle('on',hintOn);
+  if('music' in p){ Music.setEnabled(!!p.music); syncMusicBtn(); }
+  syncModeUI();
+}
+
+/* ---------- account overlay ---------- */
+const acctBtn=document.getElementById('btnAcct');
+function acctError(m){ document.getElementById('acctErr').textContent=m||''; }
+function updateAcctUI(){
+  const inEl=document.getElementById('acctLoggedIn'), outEl=document.getElementById('acctLoggedOut');
+  if(store.current && store.users[store.current]){
+    const p=store.users[store.current].profile;
+    inEl.style.display=''; outEl.style.display='none';
+    document.getElementById('acctName').textContent=store.current;
+    document.getElementById('acctLevel').textContent=p.level||1;
+    const cells = gameMode ? sizeForLevel(p.level||1) : pendingSize;
+    const shp   = gameMode ? shapeForLevel(p.level||1) : pendingShape;
+    document.getElementById('acctSize').textContent =
+      cells+'×'+cells+' '+SHAPE_LABEL[shp]+(gameMode?' · Game':' · Custom');
+    acctBtn.classList.add('on'); acctBtn.title='Account: '+store.current;
+  } else {
+    inEl.style.display='none'; outEl.style.display='';
+    acctBtn.classList.remove('on'); acctBtn.title='Account / save';
+  }
+  document.getElementById('acctStoreNote').textContent =
+    Store.ok ? '' : 'Note: storage looks blocked here, so progress only lasts this session. It saves normally when the file is opened directly in a browser.';
+}
+acctBtn.addEventListener('click', ()=>{
+  acctError(''); document.getElementById('acctUser').value=''; document.getElementById('acctPass').value='';
+  updateAcctUI(); show('acctOverlay');
+});
+document.getElementById('acctRegister').addEventListener('click', ()=>{
+  const u=document.getElementById('acctUser').value.trim(), pw=document.getElementById('acctPass').value;
+  if(u.length<1){ acctError('Enter a username.'); return; }
+  if(pw.length<1){ acctError('Enter a password.'); return; }
+  if(store.users[u]){ acctError('That username is taken.'); return; }
+  store.users[u]={ h:hashPass(pw), profile:freshProfile() };
+  store.current=u; saveStore();
+  applyProfile(activeProfile()); updateAcctUI(); hide('acctOverlay'); startLevel(); persistActive();
+});
+document.getElementById('acctLogin').addEventListener('click', ()=>{
+  const u=document.getElementById('acctUser').value.trim(), pw=document.getElementById('acctPass').value;
+  if(!store.users[u]){ acctError('No account with that name.'); return; }
+  if(store.users[u].h!==hashPass(pw)){ acctError('Wrong password.'); return; }
+  store.current=u; saveStore();
+  applyProfile(activeProfile()); updateAcctUI(); hide('acctOverlay'); startLevel();
+});
+document.getElementById('acctGuest').addEventListener('click', ()=>{
+  store.current=null; saveStore();
+  applyProfile(activeProfile()); updateAcctUI(); hide('acctOverlay'); startLevel();
+});
+document.getElementById('acctResume').addEventListener('click', ()=> hide('acctOverlay'));
+document.getElementById('acctLogout').addEventListener('click', ()=>{
+  store.current=null; saveStore(); applyProfile(activeProfile()); updateAcctUI(); startLevel();
+});
+document.getElementById('acctReset').addEventListener('click', ()=>{
+  const p=activeProfile(); p.level=1; saveStore();
+  applyProfile(activeProfile()); updateAcctUI(); startLevel();
+});
+
+/* ============================================================
+   LAYOUT — a square canvas; zoom is a camera transform, so the world
+   tile size is fixed and the wall cache only rebuilds when the maze does.
+   ============================================================ */
+function layout(){
+  const rect=boardWrap.getBoundingClientRect();
+  const availW=Math.max(120, rect.width  - 2);
+  const availH=Math.max(120, rect.height - 2);
+  viewCss=Math.max(120, Math.floor(Math.min(availW, availH)));
+  dpr=Math.min(window.devicePixelRatio||1, 2);
+  canvas.style.width=viewCss+'px'; canvas.style.height=viewCss+'px';
+  canvas.width=Math.round(viewCss*dpr); canvas.height=Math.round(viewCss*dpr);
+}
+window.addEventListener('resize', ()=> layout());
+window.addEventListener('orientationchange', ()=> setTimeout(layout,150));
+
+/* ============================================================
+   LEVEL LIFECYCLE
+   startLevel -> (re)build the current level: 1s count-in + route flash,
+                 no auto-start (steer to move), zoom & blackout per tier.
+   startGame  -> reset to level 1.
+   nextLevel  -> advance after a win.   retryLevel -> same level after a loss.
+   ============================================================ */
+function doorCountFor(){
+  const base=Math.max(2, Math.round(cols/8));
+  return Math.min(base + tierOf(level), Math.max(base, Math.round(cols/4)));
+}
+function startLevel(replay){
+  diff=difficultyFor(level);
+  darkCur=darkFor(level);
+
+  // two-level reset — assume a flat single-layer level unless we build otherwise
+  layer='over'; transit=null; tunnelLock=false; savedOver=null; underGrid=null;
+  tunnels=[]; quadExit=1; twoLevel=false;
+
+  if(replay){
+    // ---- REPLAY: rebuild the exact maze that was last played at this level ----
+    levelCells=replay.cells; levelShape=replay.shape;
+    cols=rows=levelCells; W=replay.W; H=replay.H;
+    if(replay.two){
+      twoLevel=true;
+      grid=replay.two.over.slice(); underGrid=replay.two.under.slice();
+      tunnels=replay.two.tunnels.map(t=>({x:t.x,y:t.y})); quadExit=replay.two.quadExit;
+      entry={x:replay.two.entry.x,y:replay.two.entry.y};
+      exit ={x:replay.two.exit.x, y:replay.two.exit.y};
+      entryCell={x:replay.two.entryCell.x,y:replay.two.entryCell.y};
+      oneway=new Map();
+    } else {
+      grid=replay.grid.slice();
+      entry={x:replay.entry.x,y:replay.entry.y};
+      exit ={x:replay.exit.x, y:replay.exit.y};
+      entryCell={x:replay.entryCell.x,y:replay.entryCell.y};
+      oneway=new Map(replay.oneway);
+    }
+    originalGrid=grid.slice();
+  } else {
+    // ---- FRESH ----
+    // Game mode: two-level from level 20.  Custom mode: when the test toggle is on.
+    twoLevel = (gameMode && level>=TWO_FROM) || (!gameMode && customTwoLevel>0);
+    if(twoLevel){
+      let tc = gameMode ? sizeForLevel(level) : pendingSize;
+      tc = Math.max(12, tc); if(tc&1) tc++;
+      levelCells = tc;
+      levelShape='rect';
+      const connect = gameMode ? twoConnectFor(level) : (customTwoLevel-1);
+      const b=buildTwoLevel(levelCells, connect);
+      grid=b.over; underGrid=b.under;
+      tunnels=b.tunnels; quadExit=b.quadExit;
+      entry=b.entry; exit=b.exit; entryCell=b.entryCell;
+      oneway=new Map();
+    } else {
+      levelCells = gameMode ? sizeForLevel(level) : pendingSize;
+      levelShape = gameMode ? shapeForLevel(level) : pendingShape;
+      buildMaze(levelCells, levelShape);
+      placeDoors(doorCountFor());
+    }
+    originalGrid=grid.slice();          // remember the active layer's original openness
+  }
+
+  // player waits at the entrance — no movement until the player steers
+  player.tx=entryCell.x; player.ty=entryCell.y; player.t=0; player.want='none'; player.dir='none';
+  trail=[{x:entry.x,y:entry.y},{x:entryCell.x,y:entryCell.y}];
+  visited=new Uint8Array(W*H);
+  visited[idx(entry.x,entry.y)]=1;
+  visited[idx(entryCell.x,entryCell.y)]=1;
+  stopped=false; gameWon=false; gameOver=false; runTime=0;
+  paused=false; syncPauseUI();
+  fires=[]; burningSet.clear(); stampFlash=null; sealFlashes=[];
+  grass=new Map(); balls=[]; ballCount=0; ballFlash=0; ballRoute=[]; mowCool=0;
+  teleport=null; deadEnds=[]; teleFx=null; teleEnabled = level>=TELE_FROM;
+
+  if(replay){
+    hogs    =replay.hogSpawns.map(s=> mkRoamerAt(s[0],s[1],diff.hogSpeed));
+    fsts    =replay.fstSpawns.map(s=> mkRoamerAt(s[0],s[1],diff.fstSpeed));
+    patchers=replay.patcherSpawns.map(s=> mkRoamerAt(s[0],s[1],diff.patcherSpeed));
+  } else {
+    hogs=[];     for(let i=0;i<diff.hogCount;i++)     hogs.push(spawnRoamer(diff.hogSpeed));
+    fsts=[];     for(let i=0;i<diff.fireCount;i++)    fsts.push(spawnRoamer(diff.fstSpeed));
+    patchers=[]; for(let i=0;i<diff.patcherCount;i++) patchers.push(spawnRoamer(diff.patcherSpeed));
+    // snapshot this freshly-built level so "Retry level" can replay it verbatim
+    levelSnapshot={
+      cells:levelCells, shape:levelShape, W, H, grid:originalGrid.slice(),
+      entry:{x:entry.x,y:entry.y}, exit:{x:exit.x,y:exit.y}, entryCell:{x:entryCell.x,y:entryCell.y},
+      oneway:Array.from(oneway.entries()),
+      hogSpawns:hogs.map(h=>[h.tx,h.ty]), fstSpawns:fsts.map(f=>[f.tx,f.ty]), patcherSpawns:patchers.map(p=>[p.tx,p.ty]),
+      two: twoLevel ? { over:originalGrid.slice(), under:underGrid.slice(),
+                        tunnels:tunnels.map(t=>({x:t.x,y:t.y})), quadExit:quadExit,
+                        entry:{x:entry.x,y:entry.y}, exit:{x:exit.x,y:exit.y}, entryCell:{x:entryCell.x,y:entryCell.y} } : null
+    };
+  }
+
+  timers.stamp=diff.stampEvery; timers.hog=diff.hogEvery; timers.fire=diff.fireEvery;
+  timers.patch=diff.patchEvery; timers.dark=darkCur.interval;
+  timers.grass=diff.grassEvery; timers.ball=diff.ballEvery;
+  dark.active=false; dark.ttl=0; dark.flash=0; dark.clearCells=darkCur.clearCells;
+  blob.active=false; blob.ttl=0;
+  countdown=1.0; flashTimer=flashDur(level); goFlash=0;
+  camSnap=true;                       // jump the camera to the route-preview overview
+  rebuildWalls();
+  hide('winOverlay'); hide('overOverlay');
+  layout(); recomputeSolution(); syncNextDir();
+  hudAcc=1; syncHUD(0.2);             // force HUD/centre-button to correct state immediately
+  syncShakeBox();
+  Music.newLevel(level);              // same track on retry/new-maze, fresh one on a new level
+}
+function startGame(){ level=1; Music.forgetLevel(); startLevel(); persistActive(); }
+function nextLevel(){ if(level<MAX_LEVEL) level++; startLevel(); persistActive(); }
+function retryLevel(){ startLevel(levelSnapshot || undefined); }   // replay the exact same maze
+
+function win(){
+  gameWon=true;
+  const p=activeProfile(); if(!p.best) p.best={};
+  const prev=p.best[level]; const isBest=(prev==null || runTime<prev);
+  if(isBest) p.best[level]=runTime;
+  saveStore();
+  document.getElementById('winTime').textContent=fmt(runTime);
+  document.getElementById('winLevel').textContent=level;
+  document.getElementById('winBest').textContent=fmt(p.best[level]);
+  document.getElementById('winBestTag').style.display = isBest ? '' : 'none';
+  document.getElementById('winNext').textContent = (level>=MAX_LEVEL) ? 'Max level — play again' : 'Next level →';
+  show('winOverlay');
+}
+function crash(){
+  gameOver=true;
+  document.getElementById('overLevel').textContent=level;
+  show('overOverlay');
+}
+
+/* ---------- boot ---------- */
+loadStore();
+applyProfile(activeProfile());   // resume at the saved level/settings
+updateAcctUI();
+startLevel();
+if(!store.seen){ show('infoOverlay'); store.seen=true; saveStore(); }   // how-to on first visit only
+requestAnimationFrame(t=>{ now0=t; frame(t); });
+
+})();
+</script>
+<script>
+/* Register the service worker for offline play + home-screen install.
+   Guarded so it stays silent when the file is opened directly (file://),
+   where service workers aren't allowed. */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline support optional */ });
+  });
+}
+</script>
+</body>
+</html>
