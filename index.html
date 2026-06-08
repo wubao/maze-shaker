@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<title>NEON MAZE — finger-drawn maze runner</title>
+<title>Maze Shaker — finger-drawn maze runner</title>
 <meta name="description" content="Finger-drawn neon maze runner. Thread the glowing line to the exit without crossing it.">
 <!-- PWA: installable on a phone home screen, offline-capable, launches fullscreen -->
 <link rel="manifest" href="manifest.webmanifest">
@@ -11,7 +11,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Neon Maze">
+<meta name="apple-mobile-web-app-title" content="Maze Shaker">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -532,7 +532,7 @@ input[type=range]{ width:120px; accent-color:var(--cyan); }
   <div class="stage">
     <div class="topbar">
       <div class="brand">
-        <div class="title">NEON&nbsp;MAZE</div>
+        <div class="title">MAZE&nbsp;SHAKER</div>
         <div class="sub">finger-drawn maze runner</div>
       </div>
       <div class="timers">
@@ -1261,6 +1261,34 @@ function darkFor(L){
   return { dur:DARK_DUR[t], interval:DARK_INT[t], clearCells:DARK_CELLS[t] };
 }
 
+/* ---------- CAST TRACKING (the "hunters") ----------
+   The cast (hedgehogs, fire-starters, patchers) normally wander the wall
+   lattice at random. With tracking on, the closest few instead HUNT: they
+   path along the lattice toward the player and lie in wait beside them, so
+   their timed action (plough / ignite / seal) lands right where the player is.
+
+   Eight tiers, one per 5 levels (1-5 = tier 0, 36+ = tier 7). All hunters
+   share ONE style — lattice-pathfinding interception — they differ only in:
+     • hunters : how many of the NEAREST cast members hunt (1 -> 4). The single
+                 closest always hunts first; a 2nd, then 3rd, then 4th join as
+                 the tiers climb, exactly as requested.
+     • lead    : how far AHEAD of the player (in steps along the player's own
+                 route toward the nearest tunnel / exit) the hunter aims. 0 =
+                 shadow the player's tile; higher = head them off down the line.
+                 Bigger lead = the CPU assumes more about where you're going and
+                 gets closer to cutting you off — the "smartest" behaviour.       */
+const TRACK = [
+  { hunters:1, lead:0 },   // tier 0  (lv 1-5)   — nearest one lazily shadows you
+  { hunters:1, lead:1 },   // tier 1  (lv 6-10)
+  { hunters:1, lead:2 },   // tier 2  (lv 11-15)
+  { hunters:2, lead:2 },   // tier 3  (lv 16-20) — a second hunter joins
+  { hunters:2, lead:3 },   // tier 4  (lv 21-25)
+  { hunters:3, lead:4 },   // tier 5  (lv 26-30) — a third hunter joins
+  { hunters:3, lead:5 },   // tier 6  (lv 31-35)
+  { hunters:4, lead:6 },   // tier 7  (lv 36+)   — four hunters, deep cut-off
+];
+function trackTier(){ return Math.min(TRACK.length-1, Math.floor((level-1)/5)); }
+
 /* ---------- LEVEL-DRIVEN MAZE SIZE ----------
    Difficulty is carried mostly by the maze SIZE now (used when the size
    selector is on "Auto"). Levels 1-5 are a gentle beginner band; from level 6
@@ -1681,7 +1709,7 @@ function hintRoute(){
    fire-starters light the corridor beside them.
    ============================================================ */
 // build a roamer object at a specific wall tile (used for replaying a saved level)
-function mkRoamerAt(x,y,speed){ return { tx:x, ty:y, gx:x, gy:y, prevx:x, prevy:y, p:1, speed, facing:[1,0], flash:0, hist:[], seen:new Set(), winT:0 }; }
+function mkRoamerAt(x,y,speed){ return { tx:x, ty:y, gx:x, gy:y, prevx:x, prevy:y, p:1, speed, facing:[1,0], flash:0, hist:[], seen:new Set(), winT:0, hunt:null }; }
 
 // find an interior wall tile with somewhere to walk, near (ox,oy) — used when a
 // roamer gets stranded on an isolated single-tile wall or circles a tiny pocket.
@@ -1718,9 +1746,71 @@ function spawnRoamer(speed){
   }
   return mkRoamerAt(x,y,speed);
 }
+/* BFS over the wall lattice from the wall tiles bordering the aim corridor tile
+   (ax,ay) outward until we reach the roamer at (sx,sy). Returns:
+     • [nx,ny]  — the next wall tile the roamer should step onto (one hop closer),
+     • 'hold'   — the roamer is already on a wall beside the aim (lurk in place),
+     • null     — the aim is unreachable across the lattice (caller should wander).
+   Because BFS fans out FROM the aim, the tile that first discovered the roamer's
+   tile is precisely the next step toward the player. */
+function wallStepToward(sx,sy,ax,ay){
+  const seed=[];
+  for(const d of ['up','down','left','right']){ const v=DIRV[d],x=ax+v[0],y=ay+v[1]; if(isWallTile(x,y)) seed.push([x,y]); }
+  if(!seed.length){ const t=findWallTileNear(ax,ay,4); if(!t) return null; seed.push(t); }
+  const prev=new Map(), q=[];
+  for(const s of seed){ const k=s[0]+','+s[1]; if(!prev.has(k)){ prev.set(k,null); q.push(s); } }
+  let head=0;
+  while(head<q.length){
+    const [x,y]=q[head++];
+    if(x===sx && y===sy){
+      const p=prev.get(x+','+y);
+      if(p===null) return 'hold';          // already lurking on the shore by the player
+      const pc=p.split(','); return [ +pc[0], +pc[1] ];
+    }
+    for(const [nx,ny] of wallNeighbors(x,y)){
+      const k=nx+','+ny; if(prev.has(k)) continue; prev.set(k,x+','+y); q.push([nx,ny]);
+    }
+  }
+  return null;                              // roamer's lattice region can't reach the aim
+}
+
+/* Each frame: pick which cast members hunt this tier, and give each an aim tile.
+   We rank the WHOLE cast (hogs + fire-starters + patchers) by closeness to the
+   player and flag only the nearest few — so "only the closest object tracks",
+   with extra hunters unlocking as the tier rises. Aim points sit AHEAD of the
+   player along their own route to the nearest tunnel/exit, fanned out so a pack
+   of hunters tries to cut the line off at staggered depths rather than stacking. */
+function assignHunters(){
+  const all=[hogs,fsts,patchers].flat();
+  for(const r of all) r.hunt=null;
+  if(!dist || !all.length) return;
+  const cfg=TRACK[trackTier()];
+  if(cfg.hunters<=0) return;
+  const px=player.tx, py=player.ty;
+  all.sort((a,b)=> (Math.abs(a.tx-px)+Math.abs(a.ty-py)) - (Math.abs(b.tx-px)+Math.abs(b.ty-py)));
+  const route=hintRoute();                  // the player's predicted line to a goal
+  const n=Math.min(cfg.hunters, all.length);
+  for(let i=0;i<n;i++){
+    const r=all[i];
+    if(route.length){
+      const k=Math.min(cfg.lead + i*2, route.length-1);   // fan deeper for later hunters
+      r.hunt=[route[k][0], route[k][1]];
+    } else {
+      r.hunt=[px,py];                       // no route known -> straight pursuit
+    }
+  }
+}
+
 function roamPickTarget(r){
   const nb=wallNeighbors(r.tx,r.ty);
   if(!nb.length){ r.gx=r.tx; r.gy=r.ty; return; }
+  // HUNTER: steer along the lattice toward its aim tile (player / ahead of player)
+  if(r.hunt){
+    const step=wallStepToward(r.tx,r.ty, r.hunt[0], r.hunt[1]);
+    if(Array.isArray(step)){ r.gx=step[0]; r.gy=step[1]; r.facing=[step[0]-r.tx, step[1]-r.ty]; return; }
+    if(step==='hold'){ r.gx=r.tx; r.gy=r.ty; r.facing=[0,0]; return; }
+    // null -> aim unreachable on the lattice: fall through to normal wandering
+  }
   const recent=r.hist||[];
   // 1) strongly prefer wall tiles we haven't ridden recently -> keeps them
   //    exploring the whole lattice instead of circling one little pocket.
@@ -1735,6 +1825,9 @@ function roamPickTarget(r){
 // watchdog: if a roamer keeps revisiting a tiny set of tiles, it's penned in —
 // relocate it so patchers/hedgehogs/fire-starters don't camp one corner.
 function trackConfinement(r,dt){
+  // a hunter that's lurking beside the player is "confined" on purpose — never
+  // relocate it, or it would teleport away from its prey.
+  if(r.hunt){ r.seen=new Set(); r.winT=0; return; }
   r.seen.add(r.tx+','+r.ty);
   r.winT+=dt;
   if(r.winT>=4){
@@ -3119,6 +3212,7 @@ function frame(t){
       runTime+=dt;
       tickEvents(dt);
       stepPlayer(dt);
+      assignHunters();
       for(const h of hogs) roamUpdate(h,dt);
       for(const f of fsts) roamUpdate(f,dt);
       for(const p of patchers) roamUpdate(p,dt);
