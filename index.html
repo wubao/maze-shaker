@@ -148,9 +148,11 @@ body{
   touch-action:none;
 }
 .statusline{
-  align-self:center; margin:0 auto; max-width:96%; text-align:center; line-height:1.35;
+  align-self:center; width:96%; max-width:96%; box-sizing:border-box;
+  height:30px; display:flex; align-items:center; justify-content:center; overflow:hidden;
+  text-align:center; line-height:1.2;
   font-size:10px; color:var(--muted); pointer-events:none;
-  background:rgba(8,12,18,.55); padding:4px 10px; border-radius:12px;
+  background:rgba(8,12,18,.55); padding:2px 10px; border-radius:12px;
   border:1px solid var(--line);
 }
 .statusline.warn{ color:var(--fire); border-color:rgba(255,90,31,.4); }
@@ -162,12 +164,20 @@ body{
    reset to a normal column (below). */
 .controls{ position:relative; display:grid; grid-template-columns:1fr auto 1fr;
   align-items:center; gap:6px; flex:0 0 auto; padding:6px 6px 0; margin-bottom:10px; }
+/* the steering control lives in a fixed square; the three styles swap inside it */
+.movewrap{ --pad:150px; grid-column:2; width:var(--pad); height:var(--pad); position:relative; margin:0 auto; }
+.movepad{ position:absolute; inset:0; width:var(--pad); height:var(--pad); }
+.movepad.hide{ display:none; }
 .dpad{
-  --d:46px; grid-column:2; margin:0 auto;
   display:grid; gap:6px;
-  grid-template-columns:repeat(3,var(--d));
-  grid-template-rows:repeat(3,var(--d));
+  grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
 }
+.quadpad, .ballpad{ border:1px solid var(--line); overflow:hidden; touch-action:none;
+  background:linear-gradient(180deg,#0e1925,#0a131e); cursor:pointer; }
+.quadpad{ border-radius:16px; }
+.ballpad{ border-radius:50%; background:radial-gradient(circle at 42% 38%,#16273a,#0a131e); }
+.quadpad canvas, .ballpad canvas{ width:100%; height:100%; display:block; }
+.quadpad:active, .ballpad:active{ border-color:var(--cyan); }
 .dbtn{
   appearance:none; border:1px solid var(--line); color:var(--ink);
   background:linear-gradient(180deg, #12202f, #0a131e);
@@ -431,7 +441,7 @@ input[type=range]{ width:120px; accent-color:var(--cyan); }
   .navbar{ position:static; z-index:auto; margin-top:6px; padding:0; background:none; border-top:0; backdrop-filter:none; flex-wrap:wrap; gap:10px; }
   .navbtn{ min-width:62px; padding:8px 12px; }
   .navbtn .ni{ font-size:19px; } .navbtn .nl{ font-size:9px; }
-  .dpad{ grid-column:auto; --d:62px; margin:0 auto; }
+  .movewrap{ grid-column:auto; --pad:184px; }
   .shakebox{ width:100%; }
   .dbtn{ font-size:26px; }
   .dbtn:hover{ border-color:var(--cyan); color:var(--cyan); box-shadow:0 0 16px rgba(52,225,255,.35); }
@@ -488,9 +498,9 @@ input[type=range]{ width:120px; accent-color:var(--cyan); }
 
   /* status -> a slim vertical column tucked beside the header rail, so the
      board can use the full height instead of losing a row underneath. */
-  .statusline{ order:1; align-self:stretch; width:auto; max-width:24px; margin:0;
-    writing-mode:vertical-rl; text-orientation:mixed; white-space:normal; overflow:hidden;
-    font-size:9px; line-height:1.25; padding:8px 4px; text-align:center; }
+  .statusline{ order:1; align-self:stretch; width:auto; max-width:26px; margin:0;
+    writing-mode:vertical-rl; text-orientation:upright; white-space:normal; overflow:hidden;
+    font-size:10px; line-height:1.1; letter-spacing:1px; padding:8px 4px; text-align:center; }
 
   /* controls -> right vertical rail */
   .app{ padding-bottom:max(6px, env(safe-area-inset-bottom)); }
@@ -504,7 +514,8 @@ input[type=range]{ width:120px; accent-color:var(--cyan); }
   .actions{ grid-column:auto; justify-self:auto; width:100%; }
   .navbar{ position:static; z-index:auto; margin:0; padding:0; background:none; border-top:0; backdrop-filter:none; flex-wrap:wrap; gap:8px; }
   .navbtn{ min-width:0; flex:1 1 40%; padding:6px 8px; }
-  .dpad{ grid-column:auto; --d:38px; margin:0 auto; }
+  .movewrap{ grid-column:auto; --pad:118px; }
+  .statusline{ height:auto; }
   .shakebox{ width:100%; }
   .side{ margin:0; }
   .side .row{ flex-direction:column; align-items:stretch; }
@@ -589,10 +600,10 @@ input[type=range]{ width:120px; accent-color:var(--cyan); }
 
             <div class="tabpanel" data-panel="controls">
               <p class="legend">
-                <b>Steer (touch):</b> four styles in <b style="color:var(--ink)">Account ⟶ Settings ⟶ Touch steering</b> (swipe the carousel and tap <i>Use this style</i>; each has a live demo) — <b>Tap a quadrant</b>, <b>Tap around the head</b>, <b>Trackball</b> (roll a finger like a mouse ball, no lifting), or <b>Arrow pads + STOP</b> (steer only with the buttons below).<br>
-                <b>Stop / go:</b> tap the centre of the maze, or the centre of the D-pad — this halts your line, but hazards keep moving.<br>
-                <b style="color:var(--cyan)">Pause:</b> the <b>&#9208;</b> button (or the <b>P</b> key) freezes <i>everything</i> — handy on mobile. Tap the board, the button, or press P to resume.<br>
-                <b>D-pad:</b> the four arrows below do the same as the quadrants.<br>
+                <b>Steer (touch):</b> all steering happens in the <b>control box below the maze</b> (the maze itself stays clear). Pick a style in <b style="color:var(--ink)">Settings ⟶ Steering</b> (swipe the carousel, tap <i>Use this style</i>; each has a live demo) — <b>Tap a quadrant</b> (tap the side of the pad you want), <b>Trackball</b> (roll a finger around the pad, no lifting), or <b>Arrow pads + STOP</b>.<br>
+                <b>Stop / go:</b> tap the centre of the pad (the STOP/GO disc), the D-pad centre, or a quick tap on the trackball — your line halts but hazards keep moving.<br>
+                <b style="color:var(--cyan)">Pause:</b> the <b>Pause</b> button (or the <b>P</b> key) freezes <i>everything</i> — handy on mobile. Tap the board, the button, or press P to resume.<br>
+                <b>Buttons side (phone):</b> the SLASH/FIRE box floats right by default — flip it to the left in <b style="color:var(--ink)">Settings ⟶ Settings</b>.<br>
                 <b>Desktop:</b> arrow keys / WASD to steer, <b>Space</b> to stop &amp; go.
               </p>
               <p class="legend" style="border-top:1px dashed var(--line);padding-top:10px;">
@@ -794,12 +805,23 @@ input[type=range]{ width:120px; accent-color:var(--cyan); }
       <span style="color:var(--muted);">Pop-ups: <span class="k">Tab</span> move &nbsp;<span class="k">Enter</span>/<span class="k">Space</span> press &nbsp;<span class="k">Esc</span> close — or tap the key shown on each button.</span>
     </div>
 
-    <div class="dpad" id="dpad">
-      <button class="dbtn up"     data-dir="up"     aria-label="Up">▲</button>
-      <button class="dbtn left"   data-dir="left"   aria-label="Left">◀</button>
-      <button class="dbtn center" data-act="stop"   aria-label="Stop / Go">GO</button>
-      <button class="dbtn right"  data-dir="right"  aria-label="Right">▶</button>
-      <button class="dbtn down"   data-dir="down"   aria-label="Down">▼</button>
+    <!-- Reserved movement box: the chosen steering style is shown here (the maze
+         itself never carries steering controls). Pads (arrows), Quadrant (tap a
+         side) and Trackball (roll) each occupy the same square. -->
+    <div class="movewrap" id="moveWrap">
+      <div class="dpad movepad" id="dpad" data-style="dpad">
+        <button class="dbtn up"     data-dir="up"     aria-label="Up">▲</button>
+        <button class="dbtn left"   data-dir="left"   aria-label="Left">◀</button>
+        <button class="dbtn center" data-act="stop"   aria-label="Stop / Go">GO</button>
+        <button class="dbtn right"  data-dir="right"  aria-label="Right">▶</button>
+        <button class="dbtn down"   data-dir="down"   aria-label="Down">▼</button>
+      </div>
+      <div class="quadpad movepad hide" id="quadPad" data-style="quadrant" aria-label="Tap a direction; centre to stop">
+        <canvas id="quadCanvas" width="160" height="160"></canvas>
+      </div>
+      <div class="ballpad movepad hide" id="ballPad" data-style="trackball" aria-label="Roll a finger to steer; tap to stop">
+        <canvas id="ballCanvas" width="160" height="160"></canvas>
+      </div>
     </div>
 
     <div class="actions">
@@ -2603,10 +2625,10 @@ function render(){
     ctx.fillRect(stampFlash.x*tile, stampFlash.y*tile, stampFlash.s*tile, stampFlash.s*tile);
   }
 
-  // ---- back to screen space: blackout, touch-zones, countdown ----
+  // ---- back to screen space: blackout, countdown ----
   ctx.setTransform(dpr,0,0,dpr,0,0);
   drawDarkness();
-  drawZones();
+  drawPads();           // steering visuals now live in the reserved pad box
   drawCountdown();
   drawTransit();
 }
@@ -2952,63 +2974,45 @@ function drawBlob(){
   ctx.beginPath(); ctx.arc(blob.x,blob.y,r,0,6.2832); ctx.stroke();
 }
 
-function drawZones(){
-  if(countdown>0 || paused) return;
-  const w=viewCss, h=viewCss, m=Math.min(w,h);
-  ctx.save();
-  if(touchMode==='quadrant'){
-    ctx.strokeStyle=C.zone; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(w,h); ctx.moveTo(w,0); ctx.lineTo(0,h); ctx.stroke();
-    const R=m*0.13;
-    ctx.beginPath(); ctx.arc(w/2,h/2,R,0,6.2832);
-    ctx.strokeStyle= stopped ? 'rgba(255,77,109,.5)' : 'rgba(120,180,220,.18)';
-    ctx.lineWidth=2; ctx.stroke();
-  } else if(touchMode==='relative'){
-    // a ring around the line head — tap outside it in the direction you want
-    const hs=worldToScreen(playerWorld().x, playerWorld().y), hx=hs.x, hy=hs.y, R=m*0.16;
-    ctx.strokeStyle='rgba(120,180,220,.22)'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.arc(hx,hy,R,0,6.2832); ctx.stroke();
-    ctx.beginPath(); ctx.arc(hx,hy,m*0.07,0,6.2832);
-    ctx.strokeStyle= stopped ? 'rgba(255,77,109,.5)' : 'rgba(120,180,220,.18)'; ctx.lineWidth=2; ctx.stroke();
-    ctx.fillStyle='rgba(120,180,220,.45)';
-    for(const [dxu,dyu] of [[0,-1],[0,1],[-1,0],[1,0]]){
-      const ax=hx+dxu*R*0.82, ay=hy+dyu*R*0.82, s=m*0.018;
-      ctx.beginPath();
-      ctx.moveTo(ax+dxu*s - dyu*s, ay+dyu*s - dxu*s);
-      ctx.lineTo(ax+dxu*s + dyu*s, ay+dyu*s + dxu*s);
-      ctx.lineTo(ax+dxu*s*2.1,     ay+dyu*s*2.1);
-      ctx.closePath(); ctx.fill();
-    }
-  } else if(touchMode==='trackball'){
-    drawTrackball(w/2, h*0.5, m*0.17);
-  }
-  // 'dpad' mode draws nothing on the board — steering is on the pads below
-  ctx.restore();
+// Draw the active steering pad's canvas (quadrant cross or trackball sphere).
+function drawPads(){
+  const dir=(player.want&&player.want!=='none')?player.want:player.dir;
+  if(touchMode==='quadrant') drawQuadPad(dir);
+  else if(touchMode==='trackball') drawBallPad(dir);
 }
-// a translucent sphere you can roll a finger across (whole board is the roll surface)
-function drawTrackball(bx,by,r){
-  const g=ctx.createRadialGradient(bx-r*0.3,by-r*0.3,r*0.1, bx,by,r);
-  g.addColorStop(0,'rgba(90,150,190,0.22)');
-  g.addColorStop(0.7,'rgba(40,75,105,0.15)');
-  g.addColorStop(1,'rgba(20,35,55,0.04)');
-  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(bx,by,r,0,6.2832); ctx.fill();
-  ctx.strokeStyle= stopped?'rgba(255,77,109,.45)':'rgba(120,180,220,.32)'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.arc(bx,by,r,0,6.2832); ctx.stroke();
-  ctx.strokeStyle='rgba(120,180,220,.16)'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.ellipse(bx,by,r*0.5,r,0,0,6.2832); ctx.stroke();
-  ctx.beginPath(); ctx.ellipse(bx,by,r,r*0.5,0,0,6.2832); ctx.stroke();
-  const dir = player.want!=='none'?player.want:player.dir;
-  if(dir && dir!=='none'){
-    const v=DIRV[dir];
-    ctx.strokeStyle='rgba(182,255,58,.7)'; ctx.lineWidth=2.5; ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(bx+v[0]*r*0.72, by+v[1]*r*0.72); ctx.stroke();
-  }
-  if(touchActive && trackKnob){
-    let kx=trackKnob.x, ky=trackKnob.y; const dx=kx-bx, dy=ky-by, dd=Math.hypot(dx,dy)||1;
-    if(dd>r){ kx=bx+dx/dd*r; ky=by+dy/dd*r; }
-    ctx.fillStyle='rgba(215,236,247,.85)'; ctx.shadowColor='#34e1ff'; ctx.shadowBlur=8;
-    ctx.beginPath(); ctx.arc(kx,ky,r*0.13,0,6.2832); ctx.fill(); ctx.shadowBlur=0;
-  }
+function drawQuadPad(dir){
+  const cv=document.getElementById('quadCanvas'); if(!cv) return;
+  const g=cv.getContext('2d'); const W=cv.width,H=cv.height,m=Math.min(W,H),cx=W/2,cy=H/2;
+  g.clearRect(0,0,W,H);
+  g.strokeStyle='rgba(120,180,220,.16)'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(8,8); g.lineTo(W-8,H-8); g.moveTo(W-8,8); g.lineTo(8,H-8); g.stroke();
+  for(const d of ['up','down','left','right'])
+    simArrow(g,cx,cy,d, m*0.34, d===dir?'rgba(182,255,58,.95)':'rgba(120,180,220,.5)');
+  const R=m*0.18;
+  g.fillStyle='rgba(10,16,25,.96)'; g.beginPath(); g.arc(cx,cy,R,0,6.2832); g.fill();
+  g.strokeStyle= stopped?'rgba(255,77,109,.8)':'rgba(120,180,220,.4)'; g.lineWidth=2; g.stroke();
+  g.fillStyle= stopped?'rgba(255,150,170,1)':'rgba(150,200,235,.9)';
+  g.font='700 11px "Space Mono",monospace'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(stopped?'GO':'STOP',cx,cy);
+}
+function drawBallPad(dir){
+  const cv=document.getElementById('ballCanvas'); if(!cv) return;
+  const g=cv.getContext('2d'); const W=cv.width,H=cv.height,r=Math.min(W,H)*0.46,bx=W/2,by=H/2;
+  g.clearRect(0,0,W,H);
+  const grad=g.createRadialGradient(bx-r*0.3,by-r*0.3,r*0.1,bx,by,r);
+  grad.addColorStop(0,'rgba(90,150,190,.32)'); grad.addColorStop(.7,'rgba(40,75,105,.20)'); grad.addColorStop(1,'rgba(20,35,55,.06)');
+  g.fillStyle=grad; g.beginPath(); g.arc(bx,by,r,0,6.2832); g.fill();
+  g.strokeStyle= stopped?'rgba(255,77,109,.5)':'rgba(120,180,220,.4)'; g.lineWidth=1.5; g.beginPath(); g.arc(bx,by,r,0,6.2832); g.stroke();
+  g.strokeStyle='rgba(120,180,220,.16)'; g.lineWidth=1;
+  g.beginPath(); g.ellipse(bx,by,r*0.5,r,0,0,6.2832); g.stroke();
+  g.beginPath(); g.ellipse(bx,by,r,r*0.5,0,0,6.2832); g.stroke();
+  if(dir&&dir!=='none'){ const v=DIRV[dir]; g.strokeStyle='rgba(182,255,58,.8)'; g.lineWidth=3; g.lineCap='round';
+    g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+v[0]*r*0.7,by+v[1]*r*0.7); g.stroke(); }
+  if(ballActive&&ballKnob){ let kx=ballKnob.x*(W/cv.clientWidth||1), ky=ballKnob.y*(H/cv.clientHeight||1);
+    const dx=kx-bx,dy=ky-by,dd=Math.hypot(dx,dy)||1; if(dd>r){kx=bx+dx/dd*r;ky=by+dy/dd*r;}
+    g.fillStyle='rgba(215,236,247,.9)'; g.shadowColor='#34e1ff'; g.shadowBlur=8;
+    g.beginPath(); g.arc(kx,ky,r*0.14,0,6.2832); g.fill(); g.shadowBlur=0; }
+  if(stopped){ g.fillStyle='rgba(255,150,170,.95)'; g.font='700 9px "Space Mono",monospace'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('TAP = GO',bx,by+r+0.5); }
 }
 
 function drawDarkness(){
@@ -3162,72 +3166,71 @@ function syncPauseUI(){
   if(b){ b.innerHTML = '<span class="ni">'+(paused?'&#9654;':'&#9208;')+'</span><span class="nl">'+(paused?'Resume':'Pause')+'</span>'; b.title=(paused?'Resume':'Pause')+' (P)'; b.classList.toggle('on', paused); }
 }
 
+/* The maze itself carries no steering — tapping it only resumes from a pause.
+   All steering happens on the reserved pad box below (see the pad handlers). */
 canvas.addEventListener('pointerdown', e=>{
   if(gameWon||gameOver) return;
   if(paused){ e.preventDefault(); togglePause(); return; }   // tap the board to resume
-  if(touchMode==='dpad'){ return; }                          // d-pad mode: steer only with the pads
-  e.preventDefault();
-  const r=canvas.getBoundingClientRect();
-  const x=e.clientX-r.left, y=e.clientY-r.top, w=r.width, h=r.height, m=Math.min(w,h);
-
-  if(touchMode==='relative'){
-    touchActive=true; touchPointerId=e.pointerId; try{canvas.setPointerCapture(e.pointerId);}catch(_){}
-    const hs=worldToScreen(playerWorld().x, playerWorld().y);
-    const hx=hs.x*(w/viewCss), hy=hs.y*(h/viewCss), dx=x-hx, dy=y-hy;
-    if(Math.hypot(dx,dy) <= m*0.07){ toggleStop(); touchActive=false; return; }  // on the head = stop
-    if(Math.abs(dx)>Math.abs(dy)) setWant(dx<0?'left':'right'); else setWant(dy<0?'up':'down');
-    return;
-  }
-  if(touchMode==='trackball'){
-    touchActive=true; touchPointerId=e.pointerId; lastTouch={x,y}; rollAcc={x:0,y:0}; touchMoved=0;
-    trackKnob={x:x*(viewCss/w), y:y*(viewCss/h)};
-    try{canvas.setPointerCapture(e.pointerId);}catch(_){}
-    return;
-  }
-  // quadrant (default): tap a screen quadrant; centre = stop
-  const R=m*0.13, dx=x-w/2, dy=y-h/2;
-  if(Math.hypot(dx,dy)<=R){ toggleStop(); return; }
-  if(Math.abs(dx) > Math.abs(dy)) setWant(dx<0?'left':'right');
-  else                            setWant(dy<0?'up':'down');
 }, {passive:false});
 
-canvas.addEventListener('pointermove', e=>{
-  if(!touchActive || e.pointerId!==touchPointerId || gameWon||gameOver||paused) return;
-  e.preventDefault();
-  const r=canvas.getBoundingClientRect();
-  const x=e.clientX-r.left, y=e.clientY-r.top, w=r.width, h=r.height, m=Math.min(w,h);
-  if(touchMode==='relative'){
-    const hs=worldToScreen(playerWorld().x, playerWorld().y);
-    const hx=hs.x*(w/viewCss), hy=hs.y*(h/viewCss), dx=x-hx, dy=y-hy;
-    if(Math.hypot(dx,dy) > m*0.07){
-      if(Math.abs(dx)>Math.abs(dy)) setWant(dx<0?'left':'right'); else setWant(dy<0?'up':'down');
-    }
-    return;
-  }
-  if(touchMode==='trackball'){
-    const ddx=x-lastTouch.x, ddy=y-lastTouch.y; lastTouch={x,y};
-    touchMoved += Math.hypot(ddx,ddy);
-    rollAcc.x+=ddx; rollAcc.y+=ddy;
-    trackKnob={x:x*(viewCss/w), y:y*(viewCss/h)};
-    const thr=m*0.04;                                  // roll a little to register a turn
-    if(Math.abs(rollAcc.x)>=thr || Math.abs(rollAcc.y)>=thr){
-      if(Math.abs(rollAcc.x)>Math.abs(rollAcc.y)) setWant(rollAcc.x<0?'left':'right');
-      else                                        setWant(rollAcc.y<0?'up':'down');
-      rollAcc={x:0,y:0};                               // keep rolling for the next turn — no lifting
-    }
-  }
-}, {passive:false});
+/* ---- movement pads (the reserved box) ---- */
+let ballActive=false, ballPid=null, ballLast=null, ballRoll={x:0,y:0}, ballMoved=0, ballKnob=null;
 
-function endTouch(e){
-  if(e.pointerId!==touchPointerId) return;
-  if(touchMode==='trackball' && touchActive){
-    const r=canvas.getBoundingClientRect(), m=Math.min(r.width,r.height);
-    if(touchMoved < m*0.03) toggleStop();              // a tap (no real roll) = stop / go
+// Quadrant pad: tap a side to steer, centre to stop/go.
+(function(){
+  const pad=document.getElementById('quadPad'); if(!pad) return;
+  pad.addEventListener('pointerdown', e=>{
+    if(overlayOpen()||gameWon||gameOver) return;
+    e.preventDefault();
+    const r=pad.getBoundingClientRect();
+    const x=e.clientX-r.left-r.width/2, y=e.clientY-r.top-r.height/2;
+    const R=Math.min(r.width,r.height)*0.20;
+    if(Math.hypot(x,y)<=R){ toggleStop(); return; }
+    if(Math.abs(x)>Math.abs(y)) setWant(x<0?'left':'right'); else setWant(y<0?'up':'down');
+  }, {passive:false});
+})();
+
+// Trackball pad: roll a finger to steer, a quick tap stops/goes.
+(function(){
+  const pad=document.getElementById('ballPad'); if(!pad) return;
+  pad.addEventListener('pointerdown', e=>{
+    if(overlayOpen()||gameWon||gameOver) return;
+    e.preventDefault();
+    const r=pad.getBoundingClientRect();
+    ballActive=true; ballPid=e.pointerId; ballLast={x:e.clientX,y:e.clientY};
+    ballRoll={x:0,y:0}; ballMoved=0; ballKnob={x:e.clientX-r.left, y:e.clientY-r.top};
+    try{pad.setPointerCapture(e.pointerId);}catch(_){}
+  }, {passive:false});
+  pad.addEventListener('pointermove', e=>{
+    if(!ballActive||e.pointerId!==ballPid||gameWon||gameOver) return;
+    e.preventDefault();
+    const r=pad.getBoundingClientRect();
+    const ddx=e.clientX-ballLast.x, ddy=e.clientY-ballLast.y; ballLast={x:e.clientX,y:e.clientY};
+    ballMoved+=Math.hypot(ddx,ddy); ballRoll.x+=ddx; ballRoll.y+=ddy;
+    ballKnob={x:e.clientX-r.left, y:e.clientY-r.top};
+    const thr=Math.min(r.width,r.height)*0.10;
+    if(Math.abs(ballRoll.x)>=thr||Math.abs(ballRoll.y)>=thr){
+      if(Math.abs(ballRoll.x)>Math.abs(ballRoll.y)) setWant(ballRoll.x<0?'left':'right');
+      else                                          setWant(ballRoll.y<0?'up':'down');
+      ballRoll={x:0,y:0};
+    }
+  }, {passive:false});
+  function ballEnd(e){
+    if(e.pointerId!==ballPid) return;
+    const r=pad.getBoundingClientRect();
+    if(ballMoved < Math.min(r.width,r.height)*0.06) toggleStop();   // tap = stop/go
+    ballActive=false; ballPid=null; ballKnob=null;
   }
-  touchActive=false; touchPointerId=null; trackKnob=null;
+  pad.addEventListener('pointerup', ballEnd);
+  pad.addEventListener('pointercancel', ballEnd);
+})();
+
+// show the pad matching the chosen style; the maze stays clean
+function applyTouchUI(){
+  const showId = touchMode==='trackball' ? 'ballPad' : touchMode==='quadrant' ? 'quadPad' : 'dpad';
+  ['dpad','quadPad','ballPad'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hide', id!==showId); });
+  drawPads();
 }
-canvas.addEventListener('pointerup', endTouch);
-canvas.addEventListener('pointercancel', endTouch);
 
 // D-pad
 document.getElementById('dpad').addEventListener('pointerdown', e=>{
@@ -3392,10 +3395,9 @@ document.getElementById('spd').addEventListener('input', e=>{ SPEED_PX=parseInt(
 
 /* ---- touch-steering carousel + live simulations ---- */
 const TOUCH_STYLES=[
-  {id:'quadrant',  name:'Tap a quadrant',     desc:'Tap the maze in the direction you want — top, bottom, left or right. A centre tap stops / resumes.'},
-  {id:'relative',  name:'Tap around the head', desc:'Tap or drag near the line head; whichever side you touch becomes the next turn. Tap on the head to stop.'},
-  {id:'trackball', name:'Trackball (roll)',    desc:'Roll a finger on the board like a mouse ball — the line follows your roll, no lifting needed. A quick tap stops.'},
-  {id:'dpad',      name:'Arrow pads + STOP',   desc:'Steer only with the on-screen arrow buttons and the STOP button. The maze surface ignores taps.'},
+  {id:'quadrant',  name:'Tap a quadrant',   desc:'A pad with four zones — tap the side you want to turn (top, bottom, left, right). A centre tap stops / resumes.'},
+  {id:'trackball', name:'Trackball (roll)', desc:'Roll a finger around the pad like a mouse ball and the line follows your roll — no lifting needed. A quick tap stops.'},
+  {id:'dpad',      name:'Arrow pads + STOP', desc:'Steer with the four arrow buttons and the centre STOP. The maze stays clear of controls.'},
 ];
 let simIndex=0, simRAF=0, simT=0;
 const simCanvas=document.getElementById('touchSim');
@@ -3411,7 +3413,7 @@ function tcRender(){
   TOUCH_STYLES.forEach((_,i)=>{ const d=document.createElement('span'); d.className='tcdot'+(i===simIndex?' on':''); dots.appendChild(d); });
 }
 function tcStep(d){ simIndex=(simIndex+d+TOUCH_STYLES.length)%TOUCH_STYLES.length; simT=0; tcRender(); }
-function tcUseCurrent(){ touchMode=TOUCH_STYLES[simIndex].id; touchActive=false; touchPointerId=null; trackKnob=null; tcRender(); persistActive(); }
+function tcUseCurrent(){ touchMode=TOUCH_STYLES[simIndex].id; ballActive=false; ballPid=null; ballKnob=null; applyTouchUI(); tcRender(); persistActive(); }
 document.getElementById('tcPrev').addEventListener('click', ()=>tcStep(-1));
 document.getElementById('tcNext').addEventListener('click', ()=>tcStep(1));
 document.getElementById('tcUse').addEventListener('click', tcUseCurrent);
@@ -3774,8 +3776,9 @@ function applyProfile(p){
   const spd=document.getElementById('spd'); if(spd) spd.value=String(SPEED_PX);
   document.getElementById('spdVal').textContent=SPEED_PX;
   hintOn=!!p.hint;
-  touchMode = ['quadrant','relative','trackball','dpad'].includes(p.touch) ? p.touch : 'quadrant';
+  touchMode = ['quadrant','trackball','dpad'].includes(p.touch) ? p.touch : 'quadrant';
   handSide = (p.hand==='left') ? 'left' : 'right'; applyHand();
+  applyTouchUI();
   simIndex = Math.max(0, TOUCH_STYLES.findIndex(s=>s.id===touchMode));
   tcRender();
   const hb=document.getElementById('btnHint'); hb.innerHTML='Hint: '+(hintOn?'on':'off')+'<span class="kc">H</span>'; hb.classList.toggle('on',hintOn);
